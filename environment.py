@@ -9,6 +9,7 @@ agentLayer = 0;             UDIR=0;
 goalLayer = 1;              RDIR=1;
 immobileLayer = 2;          DDIR=2;
 mobileLayer = 3;            LDIR=3;
+XDIM = 0;  YDIM = 1;
 
 layer_names = {\
         0:"Agent Layer", \
@@ -26,15 +27,17 @@ class state(object):
     def __init__(self, gridsize, num_lyrs):
         self.gridsz = gridsize
         self.num_layers = num_lyrs
-        self.grid = np.zeros((self.gridsz[0], self.gridsz[1], self.num_layers),
-                dtype='float32')
-
+        self.grid = np.zeros((self.gridsz[XDIM], self.gridsz[YDIM], \
+                self.num_layers), dtype='float32')
+ 
     def _post(self, loc, whichLayer): # set grid to on
         assert(len(loc)==2)
-        self.grid[loc[0], loc[1], whichLayer] = 1 
+        #print "Adding", layer_names[whichLayer], "to loc", loc 
+        self.grid[loc[XDIM], loc[YDIM], whichLayer] = 1 
     def _del(self, loc, whichLayer):
         assert(len(loc)==2)
-        self.grid[loc[0], loc[1], whichLayer] = 0 
+        #print "Deleting", layer_names[whichLayer], "from loc", loc
+        self.grid[loc[XDIM], loc[YDIM], whichLayer] = 0 
 
     ''' Public methods for the AGENT '''
     def get_agent_loc(self): return self.a_loc;
@@ -53,13 +56,13 @@ class state(object):
 
     ''' Public methods for the IMMOBILE BLOCKS '''
     def isImBlocked(self, loc): 
-        return self.grid[loc[0], loc[1], immobileLayer]
+        return self.grid[loc[XDIM], loc[YDIM], immobileLayer]
     def post_immobile_blocks(self, opts):
         if opts=='border':
-            [ self._post((x,y), immobileLayer) for x in range(self.gridsz[0])\
-                    for y in [0, self.gridsz[1]-1] ]
-            [ self._post((x,y), immobileLayer) for x in [0, self.gridsz[0]-1] \
-                    for y in range(1, self.gridsz[1]-1) ]
+            [self._post((x,y), immobileLayer) for x in range(self.gridsz[XDIM])\
+                    for y in [0, self.gridsz[YDIM]-1] ]
+            [self._post((x,y), immobileLayer) for x in [0, self.gridsz[XDIM]-1]\
+                    for y in range(1, self.gridsz[YDIM]-1) ]
         elif type(opts)==list:
             for l in opts: self._post(l, immobileLayer);
         elif len(opts)==2:
@@ -67,7 +70,7 @@ class state(object):
 
     ''' Public methods for the MOBILE BLOCKS '''
     def isMoBlocked(self, loc): 
-        return self.grid[loc[0], loc[1], mobileLayer]
+        return self.grid[loc[XDIM], loc[YDIM], mobileLayer]
     def post_mobile_blocks(self, locs_list):
         if type(locs_list)==list:
             for loc in locs_list: 
@@ -80,10 +83,10 @@ class state(object):
 
     ''' Method: find out what kind of object is located at a queried location '''
     def getQueryLoc(self, loc):
-        if self.grid[loc[0], loc[1], immobileLayer]==1: return immobileLayer
-        if self.grid[loc[0], loc[1], mobileLayer]==1:   return mobileLayer
-        if self.grid[loc[0], loc[1], agentLayer]==1:    return agentLayer
-        if self.grid[loc[0], loc[1], goalLayer]==1:     return goalLayer
+        if self.grid[loc[XDIM], loc[YDIM],immobileLayer]==1:return immobileLayer
+        if self.grid[loc[XDIM], loc[YDIM], mobileLayer]==1:   return mobileLayer
+        if self.grid[loc[XDIM], loc[YDIM], agentLayer]==1:    return agentLayer
+        if self.grid[loc[XDIM], loc[YDIM], goalLayer]==1:     return goalLayer
         return -1 # <- flag for 'empty square'
             
     ''' Dump the entire grid representation, for debugging '''
@@ -102,7 +105,7 @@ class state(object):
 
     ''' Use this function for testing equality between states. '''
     def equals(self, s_p):
-        return np.array_equal(self.grid, s_p.grid) and self.gridsz==s_p.grid_sz \
+        return np.array_equal(self.grid, s_p.grid) and self.gridsz==s_p.gridsz \
                 and s_p.a_loc == self.a_loc and s_p.g_loc == self.g_loc
 
     ''' Get a boolean of whether or not I am a valid, consistent state. '''
@@ -115,8 +118,8 @@ class state(object):
             if self.isMoBlocked(self.a_loc)==1.0: 
                 print "FLAG 25"
                 return False
-            for x in range(self.gridsz[0]):
-              for y in range(self.gridsz[1]):
+            for x in range(self.gridsz[XDIM]):
+              for y in range(self.gridsz[YDIM]):
                 if (self.grid[x, y, goalLayer] and \
                         self.grid[x, y, immobileLayer]): 
                     print "FLAG 95"
@@ -129,7 +132,7 @@ class state(object):
                         self.grid[x, y, mobileLayer]):
                     print "FLAG 50"
                     return False
-                if ((x==0 or y==0 or x==self.gridsz[0]-1 or y==self.gridsz[0]-1)\
+                if ((x==0 or y==0 or x==self.gridsz[XDIM]-1 or y==self.gridsz[YDIM]-1)\
                         and self.grid[x, y, immobileLayer]==0.0): 
                     print "FLAG 05"
                     return False
@@ -165,17 +168,16 @@ class environment_handler(object):
             S.post_mobile_blocks(parameters['mobiles_locs'])
         # S.dump_state();
         if not self.checkValidState(S, long_version=True):
-            print "Invalid state attempted initialization: Flag 84"
-            raise Exception()
+            raise Exception("Invalid state attempted initialization: Flag 84")
         self.states.append(S)
         return S;
     
     ''' Helper: return a new location following an action '''
     def newLoc(self, loc, action):
-        if (action in ['u','^',UDIR]): return (loc[0]+1,loc[1])
-        if (action in ['r','>',RDIR]): return (loc[0],loc[1]+1)
-        if (action in ['d','v',DDIR]): return (loc[0]-1,loc[1])
-        if (action in ['l','<',LDIR]): return (loc[0],loc[1]-1)
+        if (action in ['u','^',UDIR]): return (loc[XDIM],loc[YDIM]-1) # u and d are reversed
+        if (action in ['d','v',DDIR]): return (loc[XDIM],loc[YDIM]+1) # because of file 
+        if (action in ['r','>',RDIR]): return (loc[XDIM]+1,loc[YDIM])
+        if (action in ['l','<',LDIR]): return (loc[XDIM]-1,loc[YDIM])
 
     ''' Assertion: Verifies that a state is consistent '''
     def checkValidState(self, State, long_version=False):
@@ -217,9 +219,9 @@ class environment_handler(object):
 
     def displayGameState(self, State=None):
         ''' Print the state of the game in a visually appealing way. '''
-        for x in range(self.gridsz[0]):
+        for y in range(self.gridsz[YDIM]):
             l = []
-            for y in range(self.gridsz[1]):
+            for x in range(self.gridsz[XDIM]):
                 flag = State.getQueryLoc((x,y))
                 if flag==agentLayer: l += '@'
                 if flag==goalLayer: l += 'X'
@@ -244,16 +246,18 @@ class environment_handler(object):
         '''
         with open(fn, 'r') as f:
             self.gridsz = (int(f.readline()), int(f.readline()))
+            #revgs = (int(f.readline()), int(f.readline()))
+            #self.gridsz = (revgs[1], revgs[0])
             parameters = {}
             parameters['immobiles_locs']=[]
             parameters['mobiles_locs']=[]
-            for y in range(self.gridsz[1]):
+            for y in range(self.gridsz[YDIM]):
                 read_data = f.readline().strip()
                 for x,c in enumerate(read_data):
-                    if c=='I': parameters['immobiles_locs'].append((y,x))
-                    if c=='M': parameters['mobiles_locs'].append((y,x))
-                    if c=='A': parameters['agent_loc'] = (y,x)
-                    if c=='G': parameters['goal_loc'] = (y,x)
+                    if c=='I': parameters['immobiles_locs'].append((x,y))
+                    if c=='M': parameters['mobiles_locs'].append((x,y))
+                    if c=='A': parameters['agent_loc'] = (x,y)
+                    if c=='G': parameters['goal_loc'] = (x,y)
         self.states = []
         self.default_state = self.post_state(parameters)
     
@@ -263,27 +267,28 @@ class environment_handler(object):
 # implementation test script:
 
 
+print "The following is a test example.  For reference, @ is the agent, X is"+\
+      " the goal, O is a movable block, and # is an immovable block."
 
-fn = "./3x3-diag+M.txt"
-env = environment_handler(filename=fn)
-si = env.default_state; print "\nvalid initial state:", not si==None;env.displayGameState(si); 
-s0 = env.performAction(si, 'u');  print "\naction: u, action success:", not si.equals(s0), \
-      env.checkIfValidAction(si, 'u'); env.displayGameState(s0);
-s1 = env.performAction(s0, 'u');  print "\naction: u, action success:", not s0.equals(s1), \
-      env.checkIfValidAction(s0, 'u');  env.displayGameState(s1);
-
-s2 = env.performAction(s1, 'r');  print "\naction: r, action success:", not s1.equals(s2), \
+for fn in ["./3x3-diag+M.txt", "./3x4-diag+M.txt"]:
+ env = environment_handler(filename=fn)
+ si = env.default_state; print "\nvalid initial state:", not si==None;env.displayGameState(si); 
+ s0 = env.performAction(si, 'd');  print "\naction: d, action success:", not si.equals(s0), \
+      env.checkIfValidAction(si, 'd');  env.displayGameState(s0);
+ s1 = env.performAction(s0, 'd');  print "\naction: d, action success:", not s0.equals(s1), \
+      env.checkIfValidAction(s0, 'd');  env.displayGameState(s1);
+ s2 = env.performAction(s1, 'r');  print "\naction: r, action success:", not s1.equals(s2), \
       env.checkIfValidAction(s1, 'r');  env.displayGameState(s2);
-s3 = env.performAction(s2, 'r');  print "\naction: r, action success:", not s2.equals(s3), \
+ s3 = env.performAction(s2, 'r');  print "\naction: r, action success:", not s2.equals(s3), \
       env.checkIfValidAction(s2, 'r');  env.displayGameState(s3);
-s4 = env.performAction(s3, 'd');  print "\naction: d, action success:", not s3.equals(s4), \
-      env.checkIfValidAction(s3, 'd');  env.displayGameState(s4);
-
-s5 = env.performAction(s4, 'u');  print "\naction: u, action success:", not s4.equals(s5), \
-      env.checkIfValidAction(s4, 'u');  env.displayGameState(s5);
-s6 = env.performAction(s5, 'l');  print "\naction: l, action success:", not s5.equals(s6), \
+ s4 = env.performAction(s3, 'u');  print "\naction: u, action success:", not s3.equals(s4), \
+      env.checkIfValidAction(s3, 'u');  env.displayGameState(s4);
+ s5 = env.performAction(s4, 'd');  print "\naction: d, action success:", not s4.equals(s5), \
+      env.checkIfValidAction(s4, 'd');  env.displayGameState(s5);
+ s6 = env.performAction(s5, 'l');  print "\naction: l, action success:", not s5.equals(s6), \
       env.checkIfValidAction(s5, 'l');  env.displayGameState(s6);
-s7 = env.performAction(s6, 'd');  print "\naction: d, action success:", not s6.equals(s7), \
-      env.checkIfValidAction(s6, 'd');  env.displayGameState(s7);
+ s7 = env.performAction(s6, 'u');  print "\naction: u, action success:", not s6.equals(s7), \
+      env.checkIfValidAction(s6, 'u');  env.displayGameState(s7);
+ print '--------------------------------------------------------'
 
 print "DONE"
