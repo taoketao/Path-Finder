@@ -11,6 +11,8 @@ immobileLayer = 2;          DDIR=2;
 mobileLayer = 3;            LDIR=3;
 XDIM = 0;  YDIM = 1;
 
+all_actions = [UDIR, RDIR, DDIR, LDIR]
+
 layer_names = {\
         0:"Agent Layer", \
         1:"Goal Layer", \
@@ -261,34 +263,40 @@ class environment_handler(object):
         self.states = []
         self.default_state = self.post_state(parameters)
     
+    def getStartState(self): return self.default_state;
+
+    def getActionValidities(self, s): return np.array(\
+        [ self.checkIfValidAction(s, a) for a in all_actions ], dtype='float32')
+    def getGridSize(self): return self.gridsz;
 
 
 
 # implementation test script:
 
 
-print "The following is a test example.  For reference, @ is the agent, X is"+\
+def test_script():
+    print "The following is a test example.  For reference, @ is the agent, X is"+\
       " the goal, O is a movable block, and # is an immovable block."
 
-for fn in ["./3x3-diag+M.txt", "./3x4-diag+M.txt"]:
- env = environment_handler(filename=fn)
- si = env.default_state; print "\nvalid initial state:", not si==None;env.displayGameState(si); 
- s0 = env.performAction(si, 'd');  print "\naction: d, action success:", not si.equals(s0), \
-      env.checkIfValidAction(si, 'd');  env.displayGameState(s0);
- s1 = env.performAction(s0, 'd');  print "\naction: d, action success:", not s0.equals(s1), \
-      env.checkIfValidAction(s0, 'd');  env.displayGameState(s1);
- s2 = env.performAction(s1, 'r');  print "\naction: r, action success:", not s1.equals(s2), \
-      env.checkIfValidAction(s1, 'r');  env.displayGameState(s2);
- s3 = env.performAction(s2, 'r');  print "\naction: r, action success:", not s2.equals(s3), \
-      env.checkIfValidAction(s2, 'r');  env.displayGameState(s3);
- s4 = env.performAction(s3, 'u');  print "\naction: u, action success:", not s3.equals(s4), \
-      env.checkIfValidAction(s3, 'u');  env.displayGameState(s4);
- s5 = env.performAction(s4, 'd');  print "\naction: d, action success:", not s4.equals(s5), \
-      env.checkIfValidAction(s4, 'd');  env.displayGameState(s5);
- s6 = env.performAction(s5, 'l');  print "\naction: l, action success:", not s5.equals(s6), \
-      env.checkIfValidAction(s5, 'l');  env.displayGameState(s6);
- s7 = env.performAction(s6, 'u');  print "\naction: u, action success:", not s6.equals(s7), \
-      env.checkIfValidAction(s6, 'u');  env.displayGameState(s7);
- print '--------------------------------------------------------'
-
-print "DONE"
+    for fn in ["./state_files/3x3-diag+M.txt", "./state_files/3x4-diag+M.txt"]:
+        env = environment_handler(filename=fn)
+        si = env.default_state; print "\nvalid initial state:", not si==None;
+        env.displayGameState(si); 
+        s0 = env.performAction(si, 'd');  print "\naction: d, action success:", \
+            env.checkIfValidAction(si, 'd');  env.displayGameState(s0);
+        s1 = env.performAction(s0, 'd');  print "\naction: d, action success:", \
+            env.checkIfValidAction(s0, 'd');  env.displayGameState(s1);
+        s2 = env.performAction(s1, 'r');  print "\naction: r, action success:", \
+            env.checkIfValidAction(s1, 'r');  env.displayGameState(s2);
+        s3 = env.performAction(s2, 'r');  print "\naction: r, action success:", \
+            env.checkIfValidAction(s2, 'r');  env.displayGameState(s3);
+        s4 = env.performAction(s3, 'u');  print "\naction: u, action success:", \
+            env.checkIfValidAction(s3, 'u');  env.displayGameState(s4);
+        s5 = env.performAction(s4, 'd');  print "\naction: d, action success:", \
+            env.checkIfValidAction(s4, 'd');  env.displayGameState(s5);
+        s6 = env.performAction(s5, 'l');  print "\naction: l, action success:", \
+            env.checkIfValidAction(s5, 'l');  env.displayGameState(s6);
+        s7 = env.performAction(s6, 'u');  print "\naction: u, action success:", \
+            env.checkIfValidAction(s6, 'u');  env.displayGameState(s7);
+    print '--------------------------------------------------------'
+    print "DONE"
