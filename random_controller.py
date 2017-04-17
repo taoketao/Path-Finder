@@ -5,6 +5,7 @@ Simplest benchmark controller for pathfinder.
 from environment import *
 import tensorflow as tf
 import numpy as np
+import matplotlib.pyplot as plt
 
 ''' [Helper] Constants '''
 N_ACTIONS = 4
@@ -15,17 +16,23 @@ LAYER_NAMES = { 0:"Agent", 1:"Goal", 2:"Immobiles", 3:"Mobiles" }
 ACTION_NAMES = { UDIR:"UDIR", DDIR:"DDIR", RDIR:"RDIR", LDIR:"LDIR" }
 
 ''' Hyper parameters '''
-max_num_actions = 3;#20; # 50?
-training_episodes = 1;  # ... like an epoch
+max_num_actions = 8;#20; # 50?
+training_episodes = 2000;  # ... like an epoch
 gamma = 0.95;
-REWARD = 100.0;
+REWARD = 1.0;
 NO_REWARD = 0.0;
+learning_rate = 0.1;
+annealed_lr = np.concatenate([np.ones((training_episodes//2,))*learning_rate, \
+        np.linspace(learning_rate, learning_rate*0.01, training_episodes//2)])
+annealed_lr = np.linspace(learning_rate, learning_rate*0.1, training_episodes)
 
 ''' Architecture parameters '''
 conv1_size = 64; # number of filters in conv layer #1
 conv2_size = 64; # number of filters in conv layer #2
 fc_1_size = 100; # number of outputs in dense layer #1
 fc_2_size = 4;   # number of outputs in dense layer #2
+
+plt_arr = np.zeros((N_ACTIONS, training_episodes))
 
 class network1(object):
     def __init__(self, _env):
@@ -52,9 +59,16 @@ class network1(object):
         # these outputs are q-value estimates.
         self.output_corr = tf.placeholder(tf.float32, [None, N_ACTIONS]);
 
+        self.avgActions = np.ones((4,), dtype='float32') # laplace smoothed
+        # ^ for chooseStochStateIndependentAction choices.
 
+    def _softmax(self, X): return np.exp(X) / np.sum(np.exp(X))
+ 
     def chooseRandAction(self, s): # over actions A, as Q_hat(s,A)
         return np.random.rand(N_ACTIONS);
+    def chooseStochStateIndependentAction(self):
+        return self.avgActions/np.sum(self.avgActions) # << cumulative propotions
+        #return self._softmax(self.avgActions) #<< is bayes
     def chooseNeuralAction(self):
         Q_sa = Reward
         pass # stub
@@ -71,18 +85,21 @@ RndNet = network1(env)
 init = tf.global_variables_initializer()
 with tf.Session() as sess:
     sess.run(init);
+    reward_buffer = [] # Apply reward signals after complete path performed
+    Qval_record = [] # Apply reward signals after complete path performed
+    history = [] # buffer of (state_i, action_i) pairs
     for episode in range(training_episodes):
         s0 = env.getStartState();
-        print "\n\nInitial state:"
-        env.displayGameState(s0); print ''
-        reward_buffer = [] # Apply reward signals after complete path performed
-        Qval_record = [] # Apply reward signals after complete path performed
-        history = [] # buffer of (state_i, action_i) pairs
+        '''print "\n\nInitial state:"
+        env.displayGameState(s0); print '' '''
         for nth_action in range(max_num_actions):
             if (env.isGoalReached(s0)): break;
-            Q0_sa_FP = RndNet.chooseRandAction(s0)
+            
+            # Q0_sa_FP = RndNet.chooseRandAction(s0)
+            Q0_sa_FP = RndNet.chooseStochStateIndependentAction()
 
-            a0_est = np.argmax(Q0_sa_FP)
+            # a0_est = np.argmax(Q0_sa_FP)
+            a0_est = np.random.choice(ACTIONS, p = Q0_sa_FP)
             s1_est = env.performAction(s0, a0_est)
             R_a0_hat = NO_REWARD;
             if env.checkIfValidAction(s0, a0_est):
@@ -98,27 +115,60 @@ with tf.Session() as sess:
 
             if env.isGoalReached(s1_valid): 
                 R_a0_hat = REWARD;
+            else:
+                R_a0_hat = NO_REWARD;
 
-            reward_buffer.append(R_a0_hat-Q0_sa_FP[a0_est])
+            #reward_buffer.append(R_a0_hat-Q0_sa_FP[a0_est])
+            #reward_buffer.append(R_a0_hat-learning_rate*Q0_sa_FP[a0_est])
+#            reward_buffer.append(learning_rate * R_a0_hat * (episode+1)**-0.5)
+            #reward_buffer.append(annealed_lr[episode] * R_a0_hat /(nth_action+1))
+            reward_buffer.append(learning_rate * R_a0_hat /(nth_action+1))
+            if not env.checkIfValidAction(s0, a0_est):
+                #reward_buffer[-1]=reward_buffer[-1]/1.1
+                pass#reward_buffer[-1] += -0.01 * annealed_lr[episode];
+
             if nth_action > 0:
-                reward_buffer[-2] += gamma * Q0_sa_FP[a0_est];
+                pass
+                #reward_buffer[-2] += gamma * Q0_sa_FP[a0_est];
                 # ^ max_a' Q(s',a') for prev action: choice, not true, actions
             history.append( (s0, a0_est) )
             Qval_record.append(Q0_sa_FP)
 
             s0 = s1_valid; # Update state for next iteration
 
-            ''' for console... '''
+            ''' for console... 
             print 'vals:',Q0_sa_FP
             print "Attempted and resultant action:", a0_est, a0_valid
             print "Current state:"
-            env.displayGameState(s1_valid); print ''
+            env.displayGameState(s1_valid); 
+            print "Reward updates:", reward_buffer
+            print ''
+            '''
+            #print ACTION_NAMES[a0_est]+':'+ACTION_NAMES[a0_valid]+', ',
 
-        print "Qvals, reward updates, and actions attempted:"
+        '''print "Qvals, reward updates, and actions attempted:"
         for Q in Qval_record: print '  ', [float("{:.3}".format(q)) for q in Q]
-        print reward_buffer
-        print [h[1] for h in history]
-        print '----------------------------------------'
+        print reward_buffer'''
+        if episode%1==0: # batch hack
+            H = [h[1] for h in history]
+            for i in range(len(history)):
+                RndNet.avgActions[H[i]] += reward_buffer[i]
+            if episode%10==0: # occasionally normalize
+                pass#RndNet.avgActions -= N_ACTIONS**-1 * np.sum(RndNet.avgActions)
+            history=[]; 
+            reward_buffer=[];
+        plt_arr[:, episode] = RndNet.avgActions / np.sum(RndNet.avgActions)
+
+for a in range(N_ACTIONS):
+    plt.plot(plt_arr[a,:], label=ACTION_NAMES[a])
+plt.legend()
+plt.xlabel("Training episode")
+plt.ylabel("Probability")
+plt.title("Learned proportional state-free stochastic actions")
+plt.show()
+print ACTION_NAMES
+plt.close()
+        # print 2*'----------------------------------------\n'
 
 
 print "Done."
