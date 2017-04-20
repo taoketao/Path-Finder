@@ -27,7 +27,7 @@ REWARD = 1.0;
 NO_REWARD = 0.0;
 INVALID_REWARD = 0.0;
 GAMMA = 0.9;
-LEARNING_RATE = 0.1;
+LEARNING_RATE = 0.0001;
 VAR_SCALE = 1.0; # scaling for variance of initialized values
 
 ''' Architecture parameters '''
@@ -77,22 +77,29 @@ class network1(object):
                 self.fc1, self.fc2];'''
 
         # question: output *how many* channels from first conv layer?
+        inp_var_factor = N_LAYERS * self.gridsz[XDIM] * self.gridsz[YDIM]
         conv_filter_1_shape = (3,3,N_LAYERS,conv1_nfilters)
         cf1_var_factor = np.prod(conv_filter_1_shape)
         conv_strides_1 = (1,1,1,1)
-        conv_filter_1_init = tf.random_uniform(\
+#        conv_filter_1_init = tf.random_uniform(\
+#                conv_filter_1_shape, dtype=tf.float32, \
+#                minval = -1.0/cf1_var_factor * VAR_SCALE, \
+#                maxval =  1.0/cf1_var_factor * VAR_SCALE)
+        conv_filter_1_init = tf.random_normal(\
                 conv_filter_1_shape, dtype=tf.float32, \
-                minval = -1.0/cf1_var_factor * VAR_SCALE, \
-                maxval =  1.0/cf1_var_factor * VAR_SCALE)
+                mean=0.0, stddev=1.0/np.sqrt(inp_var_factor))
         conv_filter_1 = tf.Variable(conv_filter_1_init, \
                 name='filter1', trainable=_train, dtype=tf.float32)
 
         fc_weights_1_shape = (conv1_nfilters*np.prod(self.nconvs_1), N_ACTIONS)
         w1_var_factor = np.prod(fc_weights_1_shape)
-        fc_weights_1_init = tf.random_uniform(\
+#        fc_weights_1_init = tf.random_uniform(\
+#                fc_weights_1_shape, dtype=tf.float32,\
+#                minval = -1.0/w1_var_factor * VAR_SCALE,\
+#                maxval =  1.0/w1_var_factor * VAR_SCALE)
+        fc_weights_1_init = tf.random_normal(\
                 fc_weights_1_shape, dtype=tf.float32,\
-                minval = -1.0/w1_var_factor * VAR_SCALE,\
-                maxval =  1.0/w1_var_factor * VAR_SCALE)
+                mean=0.0, stddev=1.0/np.sqrt(cf1_var_factor))
 
         fc_weights_1 = tf.Variable(fc_weights_1_init, \
                 name='fc1', trainable=_train)
@@ -151,11 +158,11 @@ class network1(object):
             return Q_sa[0]
         return Q_sa
     
-    def update(self, sess, targ_list, pred_list):
+    def update(self, sess, orig_states, targ_list, pred_list):
         targs = np.array(targ_list, ndmin=2)
-        preds = np.array(pred_list, ndmin=2)
-        print sess.run(self.updates, feed_dict={self.targ_var: targs,\
-                self.pred_var: preds})
+        s0s = np.array([s.grid for s in orig_states])
+        sess.run(self.updates, feed_dict={self.targ_var: targs, \
+                self.input_layer: s0s} )
 
 
     def rewardGoalReached(self): pass
@@ -166,7 +173,7 @@ def acceptableChoice(choice, valids):
     return bool(valids[choice])
 
 # STUB: One iteration of a game:
-env = environment_handler(filename="./state_files/10x10-nextto.txt")
+env = environment_handler(filename="./state_files/6x6-nextto.txt")
 # STUB: consider actions for one state:
 RndNet = network1(env, 'NEURAL')
 
@@ -208,6 +215,9 @@ with tf.Session() as sess:
             
             Currently, we impose this with s1_for_update = s0.
             See [Tag 53] below.
+
+
+            s1_valid: same spot
             '''
 
         reward_buffer.append(R_a0_hat)
@@ -228,20 +238,26 @@ with tf.Session() as sess:
         losses_buffer.append(losses)
         '''
 
-        env.displayGameState(s0); 
+        #env.displayGameState(s0); 
         print ACTION_NAMES[a0_est], a0_est, R_a0_hat
-        env.displayGameState(s1_for_update); 
+        #env.displayGameState(s1_for_update); 
+
 
         targ = np.copy(Q0_sa_FP); 
-        targ[a0_est] = R_a0_hat + GAMMA * np.argmax(Q1_sa_FP)
-        update_results = RndNet.update(sess, [targ], [Q0_sa_FP])
-        print type(update_results)
+        print "Q(s1):\t\t", Q1_sa_FP
+        targ[a0_est] = R_a0_hat + GAMMA * np.max(Q1_sa_FP)
+        print 'targ & pred:\t', targ, '\n\t\t', Q0_sa_FP
+        update_results = RndNet.update(sess, [s0], [targ], [Q0_sa_FP])
+        print "orig Q(s0):\t", Q0_sa_FP
+        print 'updated Q(s0):\t', RndNet.forward_pass(sess, [s0])
+
 
 
         #s0 = s1_valid; # Update state for next iteration  STUB
 
 
     def test():
+      max_num_actions=1
       for method in range(2): 
         test_samples = 30
         test_trials = 30
@@ -276,9 +292,10 @@ with tf.Session() as sess:
                 test_samples,"samples per",test_trials,'trials for method:',s
                 '''
 
+    sys.exit()
+
     test()
     print "Sum successful actions:", RndNet.avgActions
-    sys.exit()
             
     # Plotting:
     print "Plotting..."
