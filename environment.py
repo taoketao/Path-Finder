@@ -1,16 +1,18 @@
 '''                                                                           |
 Morgan Bryant, April 2017                                                     |
-Environment class for establishing world states.                              |
+Environment class for creating and handling world states.                     |
 '''
 import numpy as np
-import sys
+import sys, os
 
 agentLayer = 0;             UDIR=0;
 goalLayer = 1;              RDIR=1;
 immobileLayer = 2;          DDIR=2;
 mobileLayer = 3;            LDIR=3;
 XDIM = 0;  YDIM = 1;
+NUM_LAYERS = 4; # agent, goal, immobile, mobile
 
+LAYER_MAP = {'A':0, 'G':1, 'I':2, 'M':3}
 all_actions = [UDIR, RDIR, DDIR, LDIR]
 
 layer_names = {\
@@ -26,11 +28,10 @@ class state(object):
         Roughly a 'RESTful' class: access is based around get, post, del, put.
     '''
 
-    def __init__(self, gridsize, num_lyrs):
+    def __init__(self, gridsize):
         self.gridsz = gridsize
-        self.num_layers = num_lyrs
         self.grid = np.zeros((self.gridsz[XDIM], self.gridsz[YDIM], \
-                self.num_layers), dtype='float32')
+                NUM_LAYERS), dtype='float32')
  
     def _post(self, loc, whichLayer): # set grid to on
         assert(len(loc)==2)
@@ -90,16 +91,22 @@ class state(object):
         if self.grid[loc[XDIM], loc[YDIM], agentLayer]==1:    return agentLayer
         if self.grid[loc[XDIM], loc[YDIM], goalLayer]==1:     return goalLayer
         return -1 # <- flag for 'empty square'
+
+    def getAllLocs(self, m_or_i):
+        if m_or_i=='m':
+          return [list(x) for x in np.argwhere(self.grid[:,:,mobileLayer]>0)]
+        if m_or_i=='i':
+          return [list(x) for x in np.argwhere(self.grid[:,:,immobileLayer]>0)]
             
     ''' Dump the entire grid representation, for debugging '''
     def dump_state(self):
-        for i in range(self.num_layers):
+        for i in range(NUM_LAYERS):
             print "Layer #"+str(i)+", the "+layer_names[i]+":"
             print self.grid[:,:,i], '\n'
 
     ''' Return an identical but distinct version of this state object '''
     def copy(self):
-        s_p = state(self.gridsz, self.num_layers)
+        s_p = state(self.gridsz)
         s_p.grid = np.copy(self.grid)
         s_p.a_loc = self.a_loc
         s_p.g_loc = self.g_loc
@@ -145,15 +152,11 @@ class environment_handler(object):
     '''
     class that handles objects.
     '''
-    num_layers = 4; # agent, goal, immobile, mobile
-    
-    def __init__(self, gridsize=None, filename=None):
+    def __init__(self, gridsize=None):
         if gridsize:
             self.gridsz = gridsize;
-            self.states = []
-        elif filename:
-            self._read_init_state_file(filename)
-
+        self.allstates = []
+    
     ''' Initialize a new state with post_state. '''
     def post_state(self, parameters):
         '''
@@ -162,7 +165,7 @@ class environment_handler(object):
             {'borders' which fills only the borders, list of points}, 
             'mobiles_locs' = list of points.
         '''
-        S = state(self.gridsz, self.num_layers)
+        S = state(self.gridsz)
         S.post_agent(parameters['agent_loc'])
         S.post_goal(parameters['goal_loc'])
         S.post_immobile_blocks(parameters['immobiles_locs'])
@@ -171,7 +174,7 @@ class environment_handler(object):
         # S.dump_state();
         if not self.checkValidState(S, long_version=True):
             raise Exception("Invalid state attempted initialization: Flag 84")
-        self.states.append(S)
+        self.allstates.append(S)
         return S;
     
     ''' Helper: return a new location following an action '''
@@ -187,23 +190,22 @@ class environment_handler(object):
         return State.checkValidity(long_version)
 
     ''' Determines whether an action is valid given a state '''
-    def checkIfValidAction(self, state, action) :
-        a_curloc = state.get_agent_loc();
+    def checkIfValidAction(self, State, action) :
+        a_curloc = State.get_agent_loc();
         queryloc = self.newLoc(a_curloc, action)
         ''' First, check if the agent tries to push a block, that it is valid: '''
-        if state.isMoBlocked(queryloc)==1.0:
+        if State.isMoBlocked(queryloc)==1.0:
             blockQueryloc = self.newLoc(queryloc, action)
-            if state.isImBlocked(blockQueryloc)==1.0: return False
+            if State.isImBlocked(blockQueryloc)==1.0: return False
         ''' Second, check if the agent direction is not blocked by immobile:'''
-        if state.isImBlocked(queryloc)==1.0: return False
+        if State.isImBlocked(queryloc)==1.0: return False
         return True
 
+    ''' Returns the State that should result from the action.  if the action 
+    was invalid, it returns the original state. newState: a bool flag for if 
+    you want to overwrite the input State or return a new one, with the 
+    original untouched.  '''
     def performAction(self, State, action, newState=True):
-        ''' Returns the State that should result from the action;
-            if the action was invalid, it returns the original state.
-            newState: a bool flag for if you want to overwrite the input State
-            or return a new one, with the original untouched.
-        '''
         valid = self.checkValidState(State) and \
                 self.checkIfValidAction(State, action)
         if not valid: return State # same state as before: current state.
@@ -218,7 +220,16 @@ class environment_handler(object):
             State_prime.put_mobile_block(newAgentLoc, newBlockLoc)
         State_prime.put_agent(newAgentLoc)
         return State_prime
+    ''' utilities '''
+    def isGoalReached(self, State):
+        if State==None:
+            return False;
+        return State.get_agent_loc() == State.get_goal_loc()
+    def getActionValidities(self, s): return np.array(\
+        [ self.checkIfValidAction(s, a) for a in all_actions ], dtype='float32')
+    def getGridSize(self): return self.gridsz;
 
+    '''  Debugging methods  '''
     def displayGameState(self, State=None):
         ''' Print the state of the game in a visually appealing way. '''
         for y in range(self.gridsz[YDIM]):
@@ -232,13 +243,31 @@ class environment_handler(object):
                 if flag==-1: l += ' '
             print ' '.join(l)
 
-    def isGoalReached(self, State):
-        ''' query: if the agent is at the goal '''
-        if State==None:
-            return False;
-        return State.get_agent_loc() == State.get_goal_loc()
+    def printOneLine(self, State, mode='print', ret_Is=False):
+        ''' Prints the state as succintly as possible '''
+        s = ''; 
+        s+= 'agent:'+str(State.get_agent_loc())+'\t'
+        s+= ' goal:'+str(State.get_goal_loc())+'\t'
+        Ms = State.getAllLocs('m')
+        for m in Ms:
+            s+= ' M:'+str(m)
+        if len(Ms)==0:
+            s+= ' [no M found]'
+        s += '\t'
+        if ret_Is:
+          Is = State.getAllLocs('I')
+          for i in Is:
+            if (i[XDIM]>0 and i[XDIM]<State.gridsz[XDIM]-1 and \
+                    i[YDIM]>0 and i[YDIM]<State.gridsz[YDIM]-1):
+                s+= ' I:'+str(m)
+          if len(Is)==0:
+            s+= ' [no inner I found]'
+        if mode=='print': print s; 
+        elif mode=='ret': return s;
+        else: print "ERR tag 82"
 
-    def _read_init_state_file(self, fn):
+    def getStateFromFile(self, filename): return self._read_state_file(filename)
+    def _read_state_file(self, fn):
         '''
         _read_init_state_file: this function takes a file (sourced from main's 
         directory path) and processes it as an initialized state file.
@@ -261,16 +290,242 @@ class environment_handler(object):
                     if c=='A': parameters['agent_loc'] = (x,y)
                     if c=='G': parameters['goal_loc'] = (x,y)
         self.states = []
-        self.default_state = self.post_state(parameters)
+        return self.post_state(parameters)
+
+# flags for state components, which I think are mildly redundant, tag 90:
+ARR=0; FLIPLR=1; FLIPUD=2; ROT90=3; ROT180=4; XSZ=5; YSZ=6;
+class state_generator(object):
+    ''' State generator class. Difficulty classes:
+        v1: Empty map, 1 step from goal.    Implemented? N
+        v2: Empty map, N steps from goal.   Implemented? N
+        v3: ...
+    '''
+    def __init__(self, gridsz): 
+        # For now, FIX gridsz so that a network architecture need not change
+        self.gridsz = gridsz;
+        self.state_diffs = {}
+        self.components = {}
+        self.prefabs = [] # named list of prefabs
+
+    ''' Component prefab reader. (use the flags at line tagged 90!) :
+        Each component prefab is an 'uninitialized' component of a map,
+        a particular arrangement of objects that are not spatially fixed but
+        are reproducible for various purposes.  KEY:
+        - XSZ and YSZ are the size of the rectangular hull of the component
+        - ARR is the array of the component as an indiactor array: the 
+            first two dims are XSZ and YSZ and the third is NUM_LAYERS=4.
+        - Boolean symmetry indicators: 
+            LR if the component is invariant over flipping over Y axis.
+            UD if the component is invariant over flipping over X axis.
+            90 if the component is invariant over 90 degree rotations.
+            180 if the component is invariant over 180 degree rotations, ie
+            has LR and UD symmetry.  ''' 
+    def ingest_component_prefabs(self, pathname):
+        component_files = [ f for f in os.listdir(pathname) \
+                if os.path.isfile(os.path.join(pathname, f))]
+        for c in component_files:
+            slot = {}
+            A = self._read_component(pathname, c)
+            slot[ARR] = A
+            slot[XSZ] = A.shape[0]
+            slot[YSZ] = A.shape[1]
+            R1 = np.rot90(A, 1, axes=(0,1))
+            R2 = np.rot90(A, 2, axes=(0,1))
+            name = os.path.splitext(c)[0]
+            slot[FLIPUD] = np.array_equal(A, np.fliplr(A)) # * note:
+            slot[FLIPLR] = np.array_equal(A, np.flipud(A)) # reversed!
+            slot[ROT90]  = np.array_equal(A, R1) and R1.shape==A.shape
+            slot[ROT180] = np.array_equal(A, R2) and R2.shape==A.shape
+            self.components[name] = slot
+            self.prefabs.append(name)
+
+    def _read_component(self, pathname, component):
+        with open(os.path.join(pathname,component), 'r') as c:
+            c_sz = (int(c.readline()), int(c.readline()))
+            prefab = np.zeros((c_sz[XDIM], c_sz[YDIM], NUM_LAYERS))
+            for y in range(c_sz[YDIM]):
+                read_data = c.readline()
+                for x,obj in enumerate(read_data):
+                    if obj in LAYER_MAP:
+                        prefab[x,y,LAYER_MAP[obj]]=1.0
+        return prefab
+
+    def _readable_component(self, c, print_or_ret):
+        cmpnt = self.components[c]
+        s = c+': { sz('+str(cmpnt[XSZ])+','+str(cmpnt[YSZ])+'); ' 
+        if np.any(cmpnt[ARR][:,:,agentLayer]): s+= 'A: '+np.array_str(\
+                np.argwhere(cmpnt[ARR][:,:,agentLayer])).replace('\n','/')+'; '
+        if np.any(cmpnt[ARR][:,:,goalLayer]): s+= 'G: '+np.array_str(\
+                np.argwhere(cmpnt[ARR][:,:,goalLayer])).replace('\n','/')+'; '
+        if np.any(cmpnt[ARR][:,:,immobileLayer]): s+= 'I: '+np.array_str(\
+                np.argwhere(cmpnt[ARR][:,:,immobileLayer])).replace('\n','/')+'; '
+        if np.any(cmpnt[ARR][:,:,mobileLayer]): s+= 'M: '+np.array_str(\
+                np.argwhere(cmpnt[ARR][:,:,mobileLayer])).replace('\n','/')+'; '
+        s+= 'Symms: '
+        if cmpnt[FLIPLR]: s+= 'LR '
+        if cmpnt[FLIPUD]: s+= 'UD '
+        if cmpnt[ROT90]: s+= '90 '
+        if cmpnt[ROT180]: s+= '180 '
+        s+='}'
+        if print_or_ret=='print': print s
+        elif print_or_ret=='return': return s
+            
+    def generate_all_states_fixedCenter(self, version, env):
+        if version=='v1': 
+            state_grids = self._generate_v1('all', 'default_center')
+            return [env.initializeState(g) for g in state_grids]
+
+    def generate_all_states_floatCenter(self, version):pass
+    def generate_N_states_fixedCenter(self, version, replacement=False):pass
+    def generate_N_states_floatCenter(self, version, replacement=False):pass
+
+    ''' -- verify where: assert that the requested [where] location fits in 
+        the specified map size and in which the non-blocked-out space is of 
+        dims (field_x, field_y). '''
+    def _verifyWhere(self, where, field_sz):
+        field_x, field_y = field_sz
+        if not (len(where)==2 and where[XDIM]>=1 and where[YDIM]>=1 and \
+                where[XDIM]+field_x < self.gridsz[XDIM] and \
+                where[YDIM]+field_y < self.gridsz[YDIM] ):
+            print "Invalid center for v1 init:", where
+            return None
+        return where
     
-    def getStartState(self): return self.default_state;
+    def _initialize_component(self, template, rootloc, field_sz, \
+                  whichCmp, cmpLoc, cmpOrien=(0,0,0), mode='arr'):
+        ''' Enrichens the template via masking. No verifications! 
+            cmpLoc: *relative* to the root location.
+            cmpOrien: orientation of (flipUD?, flipLR?, 90*x rotation?)'''
+        cmpnt = self.components[whichCmp]
+        c_arr = cmpnt[ARR]
+        if cmpOrien[0]: c_arr = np.fliplr(c_arr)
+        if cmpOrien[1]: c_arr = np.flipud(c_arr)
+        c_arr = np.rot90(c_arr, cmpOrien[2], axes=(0,1))
+        arr = np.zeros((field_sz[XDIM], field_sz[YDIM], NUM_LAYERS))
+        if cmpOrien[2]%2==0:
+            arr[ cmpLoc[XDIM] : cmpLoc[XDIM] + cmpnt[XSZ], \
+                cmpLoc[YDIM] : cmpLoc[YDIM] + cmpnt[YSZ], :] = c_arr
+        else:
+            arr[ cmpLoc[XDIM] : cmpLoc[XDIM] + cmpnt[YSZ], \
+                cmpLoc[YDIM] : cmpLoc[YDIM] + cmpnt[XSZ], :] = c_arr
+        if mode=='arr':
+            template[rootloc[XDIM] : rootloc[XDIM] + field_sz[XDIM], \
+                     rootloc[YDIM] : rootloc[YDIM] + field_sz[YDIM], :] = arr
+            return template
+        elif mode=='params':
+            parameters = template
+            if not 'immobiles_locs' in parameters:
+                parameters['immobiles_locs']=[]
+            if not 'mobiles_locs' in parameters:
+                parameters['mobiles_locs']=[]
+            aloc = np.argwhere(c_arr[:,:,agentLayer])[0]
+            aloc[XDIM] += rootloc[XDIM] + cmpLoc[XDIM]
+            aloc[YDIM] += rootloc[YDIM] + cmpLoc[YDIM]
+            parameters['agent_loc'] = aloc
+            gloc = np.argwhere(c_arr[:,:,goalLayer])[0]
+            gloc[XDIM] += rootloc[XDIM] + cmpLoc[XDIM]
+            gloc[YDIM] += rootloc[YDIM] + cmpLoc[YDIM]
+            parameters['goal_loc'] = gloc
+            ilocs = np.argwhere(c_arr[:,:,immobileLayer])
+            for iloc in ilocs:
+                iloc[XDIM] += rootloc[XDIM] + cmpLoc[XDIM]
+                iloc[YDIM] += rootloc[YDIM] + cmpLoc[YDIM]
+                parameters['immobiles_loc'].append(iloc)
+            mlocs = np.argwhere(c_arr[:,:,mobileLayer])
+            for mloc in mlocs:
+                mloc[XDIM] += rootloc[XDIM] + cmpLoc[XDIM]
+                mloc[YDIM] += rootloc[YDIM] + cmpLoc[YDIM]
+                parameters['mobiles_loc'].append(mloc)
+            return parameters
 
-    def getActionValidities(self, s): return np.array(\
-        [ self.checkIfValidAction(s, a) for a in all_actions ], dtype='float32')
-    def getGridSize(self): return self.gridsz;
 
+    def _initialize_component_dict(self, parameters, rootloc, field_sz, \
+                                   whichCmp, cmpLoc, cmpOrien):
+        cmpnt = self.components[whichCmp]
+        c_arr = cmpnt[ARR]
+        if cmpOrien[0]: c_arr = np.fliplr(c_arr)
+        if cmpOrien[1]: c_arr = np.flipud(c_arr)
+        c_arr = np.rot90(c_arr, cmpOrien[2], axes=(0,1))
+        arr = np.zeros((field_sz[XDIM], field_sz[YDIM], NUM_LAYERS))
 
+        pass
+        
+    def _fill_Immobiles(self, template, field_shape, centerloc):
+        ''' Makes the border of immobiles, fills immobiles out of field_shape '''
+        template[:,:,immobileLayer] = 1.0
+        for a in range(field_shape[XDIM]):
+          for b in range(field_shape[YDIM]):
+            template[a+centerloc[XDIM],b+centerloc[YDIM],immobileLayer]=0.0
+        return template
+    
+    
+    '''
+        Convention: parameters should be a dict of:
+            'agent_loc' = (x,y),  'goal_loc' = (x,y), 'immobiles_locs' in:
+            {'borders' which fills only the borders, list of points}, 
+            'mobiles_locs' = list of points.
+    '''
+    def _fill_Immobiles_dict(self, parameters, field_shape, centerloc):
+        ''' _fill_immobiles but with parameter dict retval '''
+        parameters['immobiles_locs']=[]
+        for a in range(self.gridsz[XDIM]):
+            for b in range(self.gridsz[YDIM]):
+                if a==0 or b==0 or a==self.gridsz[XDIM] or b==self.gridsz[YDIM] \
+                    or a>=field_shape[XDIM]+centerloc[XDIM] \
+                    or b>=field_shape[YDIM]+centerloc[YDIM]:
+                        parameters['immobiles_locs'].append((a,b))
+        return parameters
 
+    def _generate_v1(self, howmany, rootloc):
+        ''' V1, version one easiest state. These states are 3x3 and place the 
+        agent directly next to the goal. '''
+        field_shape = (3,3) # for all V1 states.
+        if rootloc=='default_center': rootloc=(1,1)
+        if not self._verifyWhere(rootloc, field_shape): sys.exit()
+        if howmany=='one':  # return: goal in center, agent above it.
+            template = np.zeros((self.gridsz[XDIM], self.gridsz[YDIM], NUM_LAYERS)) 
+            template = self._fill_Immobiles(template, field_shape, rootloc)
+            return self._initialize_component(template, rootloc, field_shape, \
+                    'nextto', cmpLoc=(0,1))
+        elif howmany=='all':
+
+            parameters = {}
+            self._fill_Immobiles_dict(parameters, field_shape, rootloc)
+            states = []
+
+            for x in range(field_shape[XDIM]-1):
+              for y in range(field_shape[YDIM]):
+                template = self._initialize_component(template, rootloc, 
+                        field_shape, 'nextto', cmpLoc=(x,y), cmpOrien=(0,0,0), 'param')
+            for y in range(field_shape[YDIM]-1):
+              for x in range(field_shape[XDIM]):
+                print 'x,y',x,y
+                template = np.zeros((self.gridsz[XDIM], self.gridsz[YDIM], NUM_LAYERS)) 
+                template = self._fill_Immobiles(template, field_shape, rootloc)
+                template = self._initialize_component(template, rootloc, 
+                        field_shape, 'nextto', cmpLoc=(x,y), cmpOrien=(0,0,1))
+                templates.append(template)
+                template = np.zeros((self.gridsz[XDIM], self.gridsz[YDIM], NUM_LAYERS)) 
+                template = self._fill_Immobiles(template, field_shape, rootloc)
+                template = self._initialize_component(template, rootloc, 
+                        field_shape, 'nextto', cmpLoc=(x,y), cmpOrien=(0,1,1))
+                templates.append(template)
+        return templates
+
+    def _generate_1_state(self, version, components):
+        ''' The core state generation function. ''' 
+        pass
+    def _calculate_minsteps(self, s):pass # TODO
+
+foo = state_generator((10,10))
+foo.ingest_component_prefabs("./data_files/components/")
+X = foo.generate_all_states_fixedCenter('v1')
+for i,x in enumerate(X):
+    print '\n',i
+    print x[1:4,1:4,0]
+    print x[1:4,1:4,1]
+
+sys.exit()
 # implementation test script:
 
 
@@ -278,9 +533,10 @@ def test_script():
     print "The following is a test example.  For reference, @ is the agent, X is"+\
       " the goal, O is a movable block, and # is an immovable block."
 
-    for fn in ["./state_files/3x3-diag+M.txt", "./state_files/3x4-diag+M.txt"]:
-        env = environment_handler(filename=fn)
-        si = env.default_state; print "\nvalid initial state:", not si==None;
+    for fn in ["./data_files/states/3x3-diag+M.txt", "./data_files/states/3x4-diag+M.txt"]:
+        env = environment_handler()
+        si = env.getStateFromFile(fn)
+        print "\nvalid initial state:", not si==None;
         env.displayGameState(si); 
         s0 = env.performAction(si, 'd');  print "\naction: d, action success:", \
             env.checkIfValidAction(si, 'd');  env.displayGameState(s0);
@@ -300,3 +556,6 @@ def test_script():
             env.checkIfValidAction(s6, 'u');  env.displayGameState(s7);
     print '--------------------------------------------------------'
     print "DONE"
+
+if __name__=='__main__':
+    test_script()
