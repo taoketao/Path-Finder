@@ -293,7 +293,7 @@ class environment_handler(object):
         return self.post_state(parameters)
 
 # flags for state components, which I think are mildly redundant, tag 90:
-ARR=0; FLIPLR=1; FLIPUD=2; ROT90=3; ROT180=4; XSZ=5; YSZ=6;
+ARR=0; FLIPLR=1; FLIPUD=2; ROT90=3; ROT180=4; XSZ=5; YSZ=6; ALOC=7; GLOC=8;
 class state_generator(object):
     ''' State generator class. Difficulty classes:
         v1: Empty map, 1 step from goal.    Implemented? N
@@ -336,6 +336,14 @@ class state_generator(object):
             slot[FLIPLR] = np.array_equal(A, np.flipud(A)) # reversed!
             slot[ROT90]  = np.array_equal(A, R1) and R1.shape==A.shape
             slot[ROT180] = np.array_equal(A, R2) and R2.shape==A.shape
+            alocs = np.argwhere(A[:,:,agentLayer])
+            if alocs.shape[0]>=1:
+                slot[ALOC] = alocs[0]
+                if alocs.shape[0]>1: raise Exception("Invalid state, tag73")
+            glocs = np.argwhere(A[:,:,goalLayer])
+            if glocs.shape[0]>=1:
+                slot[GLOC] = glocs[0]
+                if glocs.shape[0]>1: raise Exception("Invalid state, tag72")
             self.components[name] = slot
             self.prefabs.append(name)
 
@@ -372,8 +380,7 @@ class state_generator(object):
             
     def generate_all_states_fixedCenter(self, version, env):
         if version=='v1': 
-            state_grids = self._generate_v1('all', 'default_center')
-            return [env.initializeState(g) for g in state_grids]
+            return self._generate_v1('default_center', env)
 
     def generate_all_states_floatCenter(self, version):pass
     def generate_N_states_fixedCenter(self, version, replacement=False):pass
@@ -391,11 +398,8 @@ class state_generator(object):
             return None
         return where
     
-    def _initialize_component(self, template, rootloc, field_sz, \
-                  whichCmp, cmpLoc, cmpOrien=(0,0,0), mode='arr'):
-        ''' Enrichens the template via masking. No verifications! 
-            cmpLoc: *relative* to the root location.
-            cmpOrien: orientation of (flipUD?, flipLR?, 90*x rotation?)'''
+    def _adjust_for_orientation(self, whichCmp, cmpOrien, field_sz, cmpLoc):
+        ''' Rearrange the component's matrix based on requested orientation.'''
         cmpnt = self.components[whichCmp]
         c_arr = cmpnt[ARR]
         if cmpOrien[0]: c_arr = np.fliplr(c_arr)
@@ -408,57 +412,64 @@ class state_generator(object):
         else:
             arr[ cmpLoc[XDIM] : cmpLoc[XDIM] + cmpnt[YSZ], \
                 cmpLoc[YDIM] : cmpLoc[YDIM] + cmpnt[XSZ], :] = c_arr
-        if mode=='arr':
-            template[rootloc[XDIM] : rootloc[XDIM] + field_sz[XDIM], \
-                     rootloc[YDIM] : rootloc[YDIM] + field_sz[YDIM], :] = arr
-            return template
-        elif mode=='params':
-            parameters = template
+        return arr
+
+    def _initialize_component(self, template, rootloc, field_sz, \
+                  whichCmp, cmpLoc, cmpOrien=(0,0,0), mode='arr'):
+        ''' Enrichens the template via masking. No verifications! 
+            cmpLoc: *relative* to the root location.
+            cmpOrien: orientation of (flipUD?, flipLR?, 90*x rotation?)'''
+
+        # Create new parameters dict that interfaces the state system
+        if template==None and mode=='param':
+            parameters = {}
+            parameters['mobiles_locs'] = []
+            parameters['immobiles_locs'] = []
+            self._fill_Immobiles_dict(parameters, field_sz, rootloc)
+
+        arr = self._adjust_for_orientation(whichCmp, cmpOrien, field_sz, cmpLoc)
+        
+
+        if mode=='param':
+            # Set the (single) agent parameter
+            alocs = np.argwhere(arr[:,:,agentLayer])
+            if alocs.shape[0]==1: aloc = alocs[0]
+            aloc[XDIM] += rootloc[XDIM]# + cmpLoc[XDIM] <- mystery fix...
+            aloc[YDIM] += rootloc[YDIM]# + cmpLoc[YDIM]
+            parameters['agent_loc'] = aloc
+
+            # Set the (single) goal parameter
+            glocs = np.argwhere(arr[:,:,goalLayer])
+            if glocs.shape[0]==1: gloc = glocs[0]
+            gloc[XDIM] += rootloc[XDIM]# + cmpLoc[XDIM]
+            gloc[YDIM] += rootloc[YDIM]# + cmpLoc[YDIM]
+            parameters['goal_loc'] = gloc
+
+            # Set the immobile block parameters
             if not 'immobiles_locs' in parameters:
                 parameters['immobiles_locs']=[]
-            if not 'mobiles_locs' in parameters:
-                parameters['mobiles_locs']=[]
-            aloc = np.argwhere(c_arr[:,:,agentLayer])[0]
-            aloc[XDIM] += rootloc[XDIM] + cmpLoc[XDIM]
-            aloc[YDIM] += rootloc[YDIM] + cmpLoc[YDIM]
-            parameters['agent_loc'] = aloc
-            gloc = np.argwhere(c_arr[:,:,goalLayer])[0]
-            gloc[XDIM] += rootloc[XDIM] + cmpLoc[XDIM]
-            gloc[YDIM] += rootloc[YDIM] + cmpLoc[YDIM]
-            parameters['goal_loc'] = gloc
-            ilocs = np.argwhere(c_arr[:,:,immobileLayer])
+            ilocs = np.argwhere(arr[:,:,immobileLayer])
             for iloc in ilocs:
                 iloc[XDIM] += rootloc[XDIM] + cmpLoc[XDIM]
                 iloc[YDIM] += rootloc[YDIM] + cmpLoc[YDIM]
                 parameters['immobiles_loc'].append(iloc)
-            mlocs = np.argwhere(c_arr[:,:,mobileLayer])
+
+            # Set the mobile block parameters
+            if not 'mobiles_locs' in parameters:
+                parameters['mobiles_locs']=[]
+            mlocs = np.argwhere(arr[:,:,mobileLayer])
             for mloc in mlocs:
                 mloc[XDIM] += rootloc[XDIM] + cmpLoc[XDIM]
                 mloc[YDIM] += rootloc[YDIM] + cmpLoc[YDIM]
                 parameters['mobiles_loc'].append(mloc)
+
             return parameters
 
+        elif mode=='arr':
+            template[rootloc[XDIM] : rootloc[XDIM] + field_sz[XDIM], \
+                     rootloc[YDIM] : rootloc[YDIM] + field_sz[YDIM], :] = arr
+            return template
 
-    def _initialize_component_dict(self, parameters, rootloc, field_sz, \
-                                   whichCmp, cmpLoc, cmpOrien):
-        cmpnt = self.components[whichCmp]
-        c_arr = cmpnt[ARR]
-        if cmpOrien[0]: c_arr = np.fliplr(c_arr)
-        if cmpOrien[1]: c_arr = np.flipud(c_arr)
-        c_arr = np.rot90(c_arr, cmpOrien[2], axes=(0,1))
-        arr = np.zeros((field_sz[XDIM], field_sz[YDIM], NUM_LAYERS))
-
-        pass
-        
-    def _fill_Immobiles(self, template, field_shape, centerloc):
-        ''' Makes the border of immobiles, fills immobiles out of field_shape '''
-        template[:,:,immobileLayer] = 1.0
-        for a in range(field_shape[XDIM]):
-          for b in range(field_shape[YDIM]):
-            template[a+centerloc[XDIM],b+centerloc[YDIM],immobileLayer]=0.0
-        return template
-    
-    
     '''
         Convention: parameters should be a dict of:
             'agent_loc' = (x,y),  'goal_loc' = (x,y), 'immobiles_locs' in:
@@ -476,64 +487,62 @@ class state_generator(object):
                         parameters['immobiles_locs'].append((a,b))
         return parameters
 
-    def _generate_v1(self, howmany, rootloc):
+    def _generate_v1(self, rootloc, env):
         ''' V1, version one easiest state. These states are 3x3 and place the 
         agent directly next to the goal. '''
         field_shape = (3,3) # for all V1 states.
         if rootloc=='default_center': rootloc=(1,1)
         if not self._verifyWhere(rootloc, field_shape): sys.exit()
-        if howmany=='one':  # return: goal in center, agent above it.
-            template = np.zeros((self.gridsz[XDIM], self.gridsz[YDIM], NUM_LAYERS)) 
-            template = self._fill_Immobiles(template, field_shape, rootloc)
-            return self._initialize_component(template, rootloc, field_shape, \
-                    'nextto', cmpLoc=(0,1))
-        elif howmany=='all':
+        states = []
+        for x in range(field_shape[XDIM]-1):
+            for y in range(field_shape[YDIM]):
+                print '  ',x,y,'aloc, gloc:'
+                sp = self._initialize_component(None, rootloc, field_shape,\
+                        'nextto', (x,y), (0,0,0), 'param')
+                print sp['agent_loc'], sp['goal_loc']
+                states.append(env.post_state(sp))
+                sp = self._initialize_component(None, rootloc, field_shape,\
+                        'nextto', (x,y), (0,1,0), 'param')
+                print sp['agent_loc'], sp['goal_loc']
+                states.append(env.post_state(sp))
+        for y in range(field_shape[YDIM]-1):
+            for x in range(field_shape[XDIM]):
+                sp = self._initialize_component(None, rootloc, field_shape,\
+                        'nextto', (x,y), (0,0,1), 'param')
+                states.append(env.post_state(sp))
+                sp = self._initialize_component(None, rootloc, field_shape,\
+                        'nextto', (x,y), (0,1,1), 'param')
+                states.append(env.post_state(sp))
+        print len(states)
+        return states
 
-            parameters = {}
-            self._fill_Immobiles_dict(parameters, field_shape, rootloc)
-            states = []
-
-            for x in range(field_shape[XDIM]-1):
-              for y in range(field_shape[YDIM]):
-                template = self._initialize_component(template, rootloc, 
-                        field_shape, 'nextto', cmpLoc=(x,y), cmpOrien=(0,0,0), 'param')
-            for y in range(field_shape[YDIM]-1):
-              for x in range(field_shape[XDIM]):
-                print 'x,y',x,y
-                template = np.zeros((self.gridsz[XDIM], self.gridsz[YDIM], NUM_LAYERS)) 
-                template = self._fill_Immobiles(template, field_shape, rootloc)
-                template = self._initialize_component(template, rootloc, 
-                        field_shape, 'nextto', cmpLoc=(x,y), cmpOrien=(0,0,1))
-                templates.append(template)
-                template = np.zeros((self.gridsz[XDIM], self.gridsz[YDIM], NUM_LAYERS)) 
-                template = self._fill_Immobiles(template, field_shape, rootloc)
-                template = self._initialize_component(template, rootloc, 
-                        field_shape, 'nextto', cmpLoc=(x,y), cmpOrien=(0,1,1))
-                templates.append(template)
-        return templates
-
-    def _generate_1_state(self, version, components):
-        ''' The core state generation function. ''' 
-        pass
     def _calculate_minsteps(self, s):pass # TODO
 
-foo = state_generator((10,10))
-foo.ingest_component_prefabs("./data_files/components/")
-X = foo.generate_all_states_fixedCenter('v1')
-for i,x in enumerate(X):
-    print '\n',i
-    print x[1:4,1:4,0]
-    print x[1:4,1:4,1]
-
-sys.exit()
-# implementation test script:
 
 
-def test_script():
+def test_script1():
+    # this script tests the ability to generate all game states for vers1.
+    foo = state_generator((10,10))
+    env = environment_handler((10,10))
+    foo.ingest_component_prefabs("./data_files/components/")
+    X = foo.generate_all_states_fixedCenter('v1', env)
+
+    for i,x in enumerate(X):
+        env.displayGameState(x); print ''
+    print "Number of states generated:", len(X)
+    print "Above are all the possible valid game states that have a 3x3",
+    print " grid in a fixed location in which the agent is directly next",
+    print " to the goal (in any direction); that is, the first possible task."
+    print '--------------------------------------------------------'
+    print '--------------------------------------------------------'
+
+
+def test_script2():
+    # This example script demonstrates the ability for a 
     print "The following is a test example.  For reference, @ is the agent, X is"+\
       " the goal, O is a movable block, and # is an immovable block."
 
-    for fn in ["./data_files/states/3x3-diag+M.txt", "./data_files/states/3x4-diag+M.txt"]:
+    for fn in ["./data_files/states/3x3-diag+M.txt"]:#, "./data_files/states/3x4-diag+M.txt"]:
         env = environment_handler()
         si = env.getStateFromFile(fn)
         print "\nvalid initial state:", not si==None;
@@ -555,7 +564,10 @@ def test_script():
         s7 = env.performAction(s6, 'u');  print "\naction: u, action success:", \
             env.checkIfValidAction(s6, 'u');  env.displayGameState(s7);
     print '--------------------------------------------------------'
-    print "DONE"
+    print "Above is a test script that demonstrates that the state-environment-actor ",
+    print "situation is coherent and functional."
 
 if __name__=='__main__':
-    test_script()
+    test_script1()
+    test_script2()
+    print "DONE"
