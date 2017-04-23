@@ -3,7 +3,7 @@ Morgan Bryant, April 2017                                                     |
 Environment class for creating and handling world states.                     |
 '''
 import numpy as np
-import sys, os
+import sys, os, random
 
 agentLayer = 0;             UDIR=0;
 goalLayer = 1;              RDIR=1;
@@ -156,6 +156,7 @@ class environment_handler(object):
         if gridsize:
             self.gridsz = gridsize;
         self.allstates = []
+        self.optDist = -1
     
     ''' Initialize a new state with post_state. '''
     def post_state(self, parameters):
@@ -224,7 +225,7 @@ class environment_handler(object):
     def isGoalReached(self, State):
         if State==None:
             return False;
-        return State.get_agent_loc() == State.get_goal_loc()
+        return np.array_equal(State.get_agent_loc(), State.get_goal_loc())
     def getActionValidities(self, s): return np.array(\
         [ self.checkIfValidAction(s, a) for a in all_actions ], dtype='float32')
     def getGridSize(self): return self.gridsz;
@@ -242,6 +243,27 @@ class environment_handler(object):
                 if flag==mobileLayer: l += 'O'
                 if flag==-1: l += ' '
             print ' '.join(l)
+
+    def displayTransition(self, S1, S2):
+        for y in range(self.gridsz[YDIM]):
+            l1 = []; l2=[]
+            for x in range(self.gridsz[XDIM]):
+                flag = S1.getQueryLoc((x,y))
+                if flag==agentLayer: l1 += '@'
+                if flag==goalLayer: l1 += 'X'
+                if flag==immobileLayer: l1 += '#'
+                if flag==mobileLayer: l1 += 'O'
+                if flag==-1: l1 += ' '
+                flag = S2.getQueryLoc((x,y))
+                if flag==agentLayer: l2 += '@'
+                if flag==goalLayer: l2 += 'X'
+                if flag==immobileLayer: l2 += '#'
+                if flag==mobileLayer: l2 += 'O'
+                if flag==-1: l2 += ' '
+            if not y==self.gridsz[YDIM]//2:
+                print ' '.join(l1), '    ', ' '.join(l2)
+            else:
+                print ' '.join(l1), ' -> ', ' '.join(l2)
 
     def printOneLine(self, State, mode='print', ret_Is=False):
         ''' Prints the state as succintly as possible '''
@@ -291,6 +313,24 @@ class environment_handler(object):
                     if c=='G': parameters['goal_loc'] = (x,y)
         self.states = []
         return self.post_state(parameters)
+
+    ''' Functions for accessing the optimal minimum number of steps required 
+    to achieve the goal.  Used for testing. '''
+    def getOptimalNumSteps(self, s): return self.optDist
+    def _dist(self,a,b): return ((a[0]-b[0])**2 + (a[1]-b[1])**2)**0.5
+    def postOptimalNumSteps(self, s, manual_dist=-1):
+        if manual_dist>0:
+            self.optDist = manual_dist;
+            return;
+        if self._dist(s.get_goal_loc(), s.get_agent_loc()) == 1:
+            self.optDist = 1;
+            return;
+        print "Dist calculator not implemented for this state."
+        return;
+
+
+
+
 
 # flags for state components, which I think are mildly redundant, tag 90:
 ARR=0; FLIPLR=1; FLIPUD=2; ROT90=3; ROT180=4; XSZ=5; YSZ=6; ALOC=7; GLOC=8;
@@ -378,9 +418,9 @@ class state_generator(object):
         if print_or_ret=='print': print s
         elif print_or_ret=='return': return s
             
-    def generate_all_states_fixedCenter(self, version, env):
+    def generate_all_states_fixedCenter(self, version, env, oriented=False):
         if version=='v1': 
-            return self._generate_v1('default_center', env)
+            return self._generate_v1('default_center', env, oriented)
 
     def generate_all_states_floatCenter(self, version):pass
     def generate_N_states_fixedCenter(self, version, replacement=False):pass
@@ -487,7 +527,7 @@ class state_generator(object):
                         parameters['immobiles_locs'].append((a,b))
         return parameters
 
-    def _generate_v1(self, rootloc, env):
+    def _generate_v1(self, rootloc, env, oriented):
         ''' V1, version one easiest state. These states are 3x3 and place the 
         agent directly next to the goal. '''
         field_shape = (3,3) # for all V1 states.
@@ -496,29 +536,23 @@ class state_generator(object):
         states = []
         for x in range(field_shape[XDIM]-1):
             for y in range(field_shape[YDIM]):
-                print '  ',x,y,'aloc, gloc:'
                 sp = self._initialize_component(None, rootloc, field_shape,\
                         'nextto', (x,y), (0,0,0), 'param')
-                print sp['agent_loc'], sp['goal_loc']
                 states.append(env.post_state(sp))
+                if oriented: continue
                 sp = self._initialize_component(None, rootloc, field_shape,\
                         'nextto', (x,y), (0,1,0), 'param')
-                print sp['agent_loc'], sp['goal_loc']
                 states.append(env.post_state(sp))
         for y in range(field_shape[YDIM]-1):
             for x in range(field_shape[XDIM]):
+                if oriented: continue
                 sp = self._initialize_component(None, rootloc, field_shape,\
                         'nextto', (x,y), (0,0,1), 'param')
                 states.append(env.post_state(sp))
                 sp = self._initialize_component(None, rootloc, field_shape,\
                         'nextto', (x,y), (0,1,1), 'param')
                 states.append(env.post_state(sp))
-        print len(states)
         return states
-
-    def _calculate_minsteps(self, s):pass # TODO
-
-
 
 def test_script1():
     # this script tests the ability to generate all game states for vers1.
@@ -527,17 +561,35 @@ def test_script1():
     foo.ingest_component_prefabs("./data_files/components/")
     X = foo.generate_all_states_fixedCenter('v1', env)
 
-    for i,x in enumerate(X):
-        env.displayGameState(x); print ''
+    for i,s in enumerate(X):
+        env.displayGameState(s); print ''
+        env.postOptimalNumSteps(s)
+    print "Min number of steps to solve above game: ", env.getOptimalNumSteps(random.choice(X))
     print "Number of states generated:", len(X)
     print "Above are all the possible valid game states that have a 3x3",
     print " grid in a fixed location in which the agent is directly next",
     print " to the goal (in any direction); that is, the first possible task."
     print '--------------------------------------------------------'
+
+def test_script2():
+    # this script tests the ability to generate all game states for vers1.
+    foo = state_generator((10,10))
+    env = environment_handler((10,10))
+    foo.ingest_component_prefabs("./data_files/components/")
+    X = foo.generate_all_states_fixedCenter('v1', env, oriented=True)
+
+    for i,s in enumerate(X):
+        env.displayGameState(s); print ''
+        env.postOptimalNumSteps(s)
+    print "Min number of steps to solve above game: ", env.getOptimalNumSteps(random.choice(X))
+    print "Number of states generated:", len(X)
+    print "Above are all the possible valid game states that have a 3x3",
+    print " grid in a fixed location in which the agent is directly next",
+    print " to the goal (in any direction); that is, the first possible task."
     print '--------------------------------------------------------'
 
 
-def test_script2():
+def test_script3():
     # This example script demonstrates the ability for a 
     print "The following is a test example.  For reference, @ is the agent, X is"+\
       " the goal, O is a movable block, and # is an immovable block."
@@ -570,4 +622,5 @@ def test_script2():
 if __name__=='__main__':
     test_script1()
     test_script2()
+    test_script3()
     print "DONE"
