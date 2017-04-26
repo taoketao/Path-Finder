@@ -4,7 +4,7 @@ Environment class for creating and handling world states.                     |
 '''
 import numpy as np
 import sys, os, random
-
+ 
 agentLayer = 0;             UDIR=0;
 goalLayer = 1;              RDIR=1;
 immobileLayer = 2;          DDIR=2;
