@@ -7,6 +7,7 @@ import sys, os, random
 
 agentLayer = 0;             UDIR=0;
 goalLayer = 1;              RDIR=1;
+
 immobileLayer = 2;          DDIR=2;
 mobileLayer = 3;            LDIR=3;
 XDIM = 0;  YDIM = 1;
