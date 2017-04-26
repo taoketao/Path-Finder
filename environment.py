@@ -556,12 +556,16 @@ class state_generator(object):
 
 def test_script1():
     # this script tests the ability to generate all game states for vers1.
-    foo = state_generator((10,10))
-    env = environment_handler((10,10))
+    #foo = state_generator((10,10))
+    #env = environment_handler((10,10))
+
+    foo = state_generator((5,5))
+    env = environment_handler((5,5))
     foo.ingest_component_prefabs("./data_files/components/")
     X = foo.generate_all_states_fixedCenter('v1', env)
 
     for i,s in enumerate(X):
+        print i,':'
         env.displayGameState(s); print ''
         env.postOptimalNumSteps(s)
     print "Min number of steps to solve above game: ", env.getOptimalNumSteps(random.choice(X))
@@ -579,7 +583,7 @@ def test_script2():
     X = foo.generate_all_states_fixedCenter('v1', env, oriented=True)
 
     for i,s in enumerate(X):
-        env.displayGameState(s); print ''
+        env.displayGameState(s);
         env.postOptimalNumSteps(s)
     print "Min number of steps to solve above game: ", env.getOptimalNumSteps(random.choice(X))
     print "Number of states generated:", len(X)
@@ -621,6 +625,6 @@ def test_script3():
 
 if __name__=='__main__':
     test_script1()
-    test_script2()
-    test_script3()
+    #test_script2()
+#    test_script3()
     print "DONE"
