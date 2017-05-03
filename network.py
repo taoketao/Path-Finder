@@ -646,7 +646,7 @@ def test_script(version, dest):
 
         f, ax=plt.subplots(4,4, sharex=True)
         f.tight_layout()
-        plt.subplots_adjust(left=0.1, bottom=0.1, top=0.9)
+        plt.subplots_adjust(left=0.15, bottom=0.1, top=0.9)
         ax[0,0].plot(range(len(Q)),[q[0][3][0] for q in Q], c='blue') # u
         ax[0,1].plot(range(len(Q)),[q[0][3][1] for q in Q], c='green') # r
         ax[0,2].plot(range(len(Q)),[q[0][3][2] for q in Q], c='red') # u
