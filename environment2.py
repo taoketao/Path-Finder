@@ -9,10 +9,18 @@ agentLayer = 0;             UDIR=0;
 goalLayer = 1;              RDIR=1;
 immobileLayer = 2;          DDIR=2;
 mobileLayer = 3;            LDIR=3;
+
+ROT0=0; ROT1=4; ROT2=8; ROT3=12;
+
 XDIM = 0;  YDIM = 1;
 NUM_LAYERS = 4; # agent, goal, immobile, mobile
 
 LAYER_MAP = {'A':0, 'G':1, 'I':2, 'M':3}
+#all_actions = \
+#        [UDIR+ROT0, RDIR+ROT0, DDIR+ROT0, LDIR+ROT0,
+#         UDIR+ROT1, RDIR+ROT1, DDIR+ROT1, LDIR+ROT1,
+#         UDIR+ROT2, RDIR+ROT2, DDIR+ROT2, LDIR+ROT2,
+#         UDIR+ROT3, RDIR+ROT3, DDIR+ROT3, LDIR+ROT3]
 all_actions = [UDIR, RDIR, DDIR, LDIR]
 
 layer_names = {\
@@ -117,6 +125,24 @@ class state(object):
         return np.array_equal(self.grid, s_p.grid) and self.gridsz==s_p.gridsz \
                 and s_p.a_loc == self.a_loc and s_p.g_loc == self.g_loc
 
+    ''' Rotates a state by 90*rot degrees.  Only supported currently for 
+        square grids.'''
+    def rotate(self, rot): 
+        aloc = self.a_loc;
+        gloc = self.g_loc;
+        if rot==0: 
+            pass
+        if rot==3:
+            self.a_loc = (aloc[1], self.gridsz[0]-aloc[0]-1)
+            self.g_loc = (gloc[1], self.gridsz[0]-gloc[0]-1)
+        if rot==2:
+            self.a_loc = (self.gridsz[0]-aloc[0]-1, self.gridsz[1]-aloc[1]-1)
+            self.g_loc = (self.gridsz[0]-gloc[0]-1, self.gridsz[1]-gloc[1]-1)
+        if rot==1:
+            self.a_loc = (self.gridsz[1]-aloc[1]-1, aloc[0])
+            self.g_loc = (self.gridsz[1]-gloc[1]-1, gloc[0])
+        self.grid = np.rot90(self.grid, rot)
+
     ''' Get a boolean of whether or not I am a valid, consistent state. '''
     def checkValidity(self, long_version):
         if self.isImBlocked(self.a_loc)==1.0: return False
@@ -147,14 +173,21 @@ class state(object):
                     return False
         return True
 
+    def dump_grid(self):
+        for y in range(self.gridsz[1]):
+            for i in range(NUM_LAYERS):
+                print self.grid[:,y,i], '\t',
+            print ''
 
-class environment_handler(object):
+
+class environment_handler2(object):
     '''
-    class that handles objects.
+    class that handles objects, Rotational version.
     '''
     def __init__(self, gridsize=None):
         if gridsize:
             self.gridsz = gridsize;
+            assert(gridsize[0]==gridsize[1])
         self.allstates = []
         self.optDist = -1
     
@@ -192,6 +225,8 @@ class environment_handler(object):
 
     ''' Determines whether an action is valid given a state '''
     def checkIfValidAction(self, State, action) :
+        if action==None:
+            return True
         a_curloc = State.get_agent_loc();
         queryloc = self.newLoc(a_curloc, action)
         ''' First, check if the agent tries to push a block, that it is valid: '''
@@ -202,30 +237,36 @@ class environment_handler(object):
         if State.isImBlocked(queryloc)==1.0: return False
         return True
 
+    def rotate(self, state, rot): 
+        state.rotate(rot); return state
+
     ''' Returns the State that should result from the action.  if the action 
     was invalid, it returns the original state. newState: a bool flag for if 
     you want to overwrite the input State or return a new one, with the 
     original untouched.  '''
-    def performAction(self, State, action, newState=True):
+    def performAction(self, State, action, rot=0, newState=True):
         valid = self.checkValidState(State) and \
                 self.checkIfValidAction(State, action)
         if not valid: return State # same state as before: current state.
 
+        State_prime = State.copy() if newState else State
+        if action=='no_move': # ie, only rotate
+            return self.rotate(State_prime, rot)
+
         newAgentLoc = self.newLoc(State.get_agent_loc(), action)
-        if newState:
-            State_prime = State.copy()
-        else:
-            State_prime = State
         if State_prime.isMoBlocked(newAgentLoc)==1.0: 
             newBlockLoc = self.newLoc(newAgentLoc, action)
             State_prime.put_mobile_block(newAgentLoc, newBlockLoc)
         State_prime.put_agent(newAgentLoc)
+        State_prime = self.rotate(State_prime, rot)
         return State_prime
+
     ''' utilities '''
     def isGoalReached(self, State):
         if State==None:
             return False;
         return np.array_equal(State.get_agent_loc(), State.get_goal_loc())
+    # TODO: update this V
     def getActionValidities(self, s): return np.array(\
         [ self.checkIfValidAction(s, a) for a in all_actions ], dtype='float32')
     def getGridSize(self): return self.gridsz;
@@ -560,7 +601,7 @@ def test_script1():
     #env = environment_handler((10,10))
 
     foo = state_generator((5,5))
-    env = environment_handler((5,5))
+    env = environment_handler2((5,5))
     foo.ingest_component_prefabs("./data_files/components/")
     X = foo.generate_all_states_fixedCenter('v1', env)
 
@@ -599,27 +640,30 @@ def test_script3():
       " the goal, O is a movable block, and # is an immovable block."
 
     for fn in ["./data_files/states/3x3-diag+M.txt"]:#, "./data_files/states/3x4-diag+M.txt"]:
-        env = environment_handler()
-        si = env.getStateFromFile(fn)
-        print "\nvalid initial state:", not si==None;
-        env.displayGameState(si); 
-        s0 = env.performAction(si, 'd');  print "\naction: d, action success:", \
-            env.checkIfValidAction(si, 'd');  env.displayGameState(s0);
-        s1 = env.performAction(s0, 'd');  print "\naction: d, action success:", \
-            env.checkIfValidAction(s0, 'd');  env.displayGameState(s1);
-        s2 = env.performAction(s1, 'r');  print "\naction: r, action success:", \
-            env.checkIfValidAction(s1, 'r');  env.displayGameState(s2);
-        s3 = env.performAction(s2, 'r');  print "\naction: r, action success:", \
-            env.checkIfValidAction(s2, 'r');  env.displayGameState(s3);
-        s4 = env.performAction(s3, 'u');  print "\naction: u, action success:", \
-            env.checkIfValidAction(s3, 'u');  env.displayGameState(s4);
-        s5 = env.performAction(s4, 'd');  print "\naction: d, action success:", \
-            env.checkIfValidAction(s4, 'd');  env.displayGameState(s5);
-        s6 = env.performAction(s5, 'l');  print "\naction: l, action success:", \
-            env.checkIfValidAction(s5, 'l');  env.displayGameState(s6);
-        s7 = env.performAction(s6, 'u');  print "\naction: u, action success:", \
-            env.checkIfValidAction(s6, 'u');  env.displayGameState(s7);
-    print '--------------------------------------------------------'
+      for act_seq in [ [('d',2), ('l',1)], [('d',1), ('r',2), ('r',3), ('l',0)]]:
+        env = environment_handler2()
+        s0 = env.getStateFromFile(fn)
+        print "\nvalid initial state:", not s0==None;
+        env.displayGameState(s0); 
+        s0.dump_grid()
+        #for action in [ ('d',0), ('d',0), ('r',0), ('u',0) ]:
+        for action in act_seq:
+            a, r = action
+            s1 = env.performAction(s0, a,r);  print "\naction:",a,"action success:", \
+                env.checkIfValidAction(s0, a);  
+            print "Goal reached?: ", env.isGoalReached(s1)
+            env.displayGameState(s1);
+            s1.dump_grid()
+            s0=s1
+            
+
+#        s1 = env.performAction(s0, 'l',3);  print "\naction: d, action success:", \
+#            env.checkIfValidAction(s0, 'd');  env.displayGameState(s1);
+#        s2 = env.performAction(s1, 'r',0);  print "\naction: r, action success:", \
+#            env.checkIfValidAction(s1, 'r');  env.displayGameState(s2);
+#        s3 = env.performAction(s2, 'u',0);  print "\naction: u, action success:", \
+#            env.checkIfValidAction(s2, 'u');  env.displayGameState(s3);
+        print '--------------------------------------------------------'
     print "Above is a test script that demonstrates that the state-environment-actor ",
     print "situation is coherent and functional."
 
