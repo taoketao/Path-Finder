@@ -7,7 +7,7 @@ import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
 from environment2 import *
-from save_as_plot import save_as_plot
+from save_as_plot import *
 
 ''' system/os constants '''
 COMPONENTS_LOC = "./data_files/components/"
@@ -26,7 +26,7 @@ LAYER_NAMES = { 0:"Agent", 1:"Goal", 2:"Immobiles", 3:"Mobiles" }
 ''' [Default] Hyper parameters '''
 TRAINING_EPISODES = 300;  # ... like an epoch
 MAX_NUM_ACTIONS = 15;
-EPSILON = 1.1;
+EPSILON = 1.0;
 REWARD = 1;
 NO_REWARD = 0.0;
 INVALID_REWARD = 0.0;
@@ -35,11 +35,11 @@ LEARNING_RATE = 0.01;
 VAR_SCALE = 1.0; # scaling for variance of initialized values
 
 ''' Architecture parameters '''
-C1_NFILTERS = 64;       # number of filters in conv layer #1
+C1_NFILTERS = 16;       # number of filters in conv layer #1
 C1_SZ = (3,3);          # size of conv #2's  window
-C2_NFILTERS = 64;       # number of filters in conv layer #2
+C2_NFILTERS = 16;       # number of filters in conv layer #2
 C2_SZ = (3,3);          # size of conv #2's  window
-FC_1_SIZE = 100;        # number of outputs in dense layer #1
+FC_1_SIZE = 36;        # number of outputs in dense layer #1
 N_ROTATIONS = 4; # FC layer 2 out size: # actions or # actions + # rotations.
 
 ''' utility functions '''
@@ -81,12 +81,14 @@ class network2(object):
         _train: solidifies learned weights, and is unchangeable after (?)
         _optimizer_type: one of <sgd>, <adam> for now. '''
     def __init__(self, _env, _version="NEURAL", _batch_off=True, _train=True,\
-            _optimizer_type='sgd', override=None, load_weights_path=None, rot=False):
+            _optimizer_type='adam', override=None, load_weights_path=None, \
+            rot=False, _game_version='v1'):
         ''' inputs: shape [batch, X, Y, 4-action-layers]. '''
         self.gridsz = _env.getGridSize()
         self.env = _env
         self.version = _version;
         self.batch_off = _batch_off; # for now.
+        self.game_version = _game_version
         self.rot=rot;
         if not override==None and 'learning_rate' in override:
             self.learning_rate = override['learning_rate']
@@ -125,12 +127,20 @@ class network2(object):
         ''' trainable Tensorflow Variables '''
         self.conv_filter_1 = tf.Variable(inits['cv1'], \
                 name='filter1', trainable=_train, dtype=tf.float32)
+        self.conv_bias_1 = tf.Variable(inits['cv1_b'], \
+                name='filter1_bias', trainable=_train, dtype=tf.float32)
         self.conv_filter_2 = tf.Variable(inits['cv2'], \
                 name='filter2', trainable=_train, dtype=tf.float32)
+        self.conv_bias_2 = tf.Variable(inits['cv2_b'], \
+                name='filter2_bias', trainable=_train, dtype=tf.float32)
         self.fc_weights_1 = tf.Variable(inits['fc1'], \
                 name='fc1', trainable=_train)
+        self.fc_bias_1 = tf.Variable(inits['fc1_b'], \
+                name='fc1_bias', trainable=_train)
         self.fc_weights_2 = tf.Variable(inits['fc2'], \
                 name='fc2', trainable=_train)
+        self.fc_bias_2 = tf.Variable(inits['fc2_b'], \
+                name='fc2_bias', trainable=_train)
 
         ''' Layer Construction (ie forward pass construction) '''
         self.input_layer = tf.placeholder(tf.float32, [None,                  \
@@ -141,31 +151,33 @@ class network2(object):
                 strides = conv_strides_1, \
                 padding = 'VALID', \
                 name = "conv1")
-        self.l1_act = tf.nn.relu( self.l1 )
+        self.l1_act = tf.nn.relu( self.l1 + self.conv_bias_1 )
         self.l2 = tf.nn.conv2d(\
                 input = self.l1, \
                 filter = self.conv_filter_2,\
                 strides = conv_strides_2, \
                 padding = 'VALID', \
                 name = "conv2")
-        self.l2_act = tf.nn.relu( self.l2 )
+        self.l2_act = tf.nn.relu( self.l2 + self.conv_bias_2 )
         self.l2_flat = tf.contrib.layers.flatten(self.l2_act)
         self.l3 = tf.matmul(self.l2_flat, self.fc_weights_1, name='fc1')
-        self.l3_act = tf.nn.relu( self.l3 )
+        self.l3_act = tf.nn.relu( self.l3 + self.fc_bias_1 )
         self.l4 = tf.matmul(self.l3_act, self.fc_weights_2, name='fc2')
-        self.output_layer = tf.nn.tanh(self.l4, name='output')
+        self.output_layer = tf.nn.tanh(self.l4+self.fc_bias_2, name='output')
 
         self.trainable_vars = [self.conv_filter_1, self.conv_filter_2, \
-                self.fc_weights_1, self.fc_weights_2] # the important variables.
+                self.fc_weights_1, self.fc_weights_2, self.conv_bias_1, \
+                self.conv_bias_2, self.fc_bias_1, self.fc_bias_2]
 
         ''' Network operations (besides forward passing) '''
         self.pred_var = self.output_layer
         self.targ_var = tf.placeholder(tf.float32, [None, OUT_SIZE])
         self.loss_op = tf.reduce_sum(tf.square( self.pred_var - self.targ_var ))
+        #self.loss_op = tf.reduce_sum(tf.abs( self.pred_var - self.targ_var ))
         if _optimizer_type=='sgd':
             self.optimizer = tf.train.GradientDescentOptimizer(self.learning_rate)
         elif _optimizer_type=='adam':
-            self.optimizer = tf.train.AdamOptimizer(self.learning_rate)
+            self.optimizer = tf.train.AdamOptimizer(self.learning_rate, epsilon=0.00001)
         self.updates = self.optimizer.minimize(self.loss_op)
  
         self.sess = None
@@ -179,6 +191,10 @@ class network2(object):
             weights['cv2'] = tf.constant(loaded['cv2'])
             weights['fc1'] = tf.constant(loaded['fc1'])
             weights['fc2'] = tf.constant(loaded['fc2'])
+            weights['cv1_b'] = tf.constant(loaded['cv1_b'])
+            weights['cv2_b'] = tf.constant(loaded['cv2_b'])
+            weights['fc1_b'] = tf.constant(loaded['fc1_b'])
+            weights['fc2_b'] = tf.constant(loaded['fc2_b'])
             #weights = dict(zip(('cv1','cv2','fc1','fc2'), (tf.constant(
             #    loaded[l]) for l in loaded)))
         else:
@@ -200,14 +216,30 @@ class network2(object):
                 weights['cv1'] = tf.random_uniform(\
                     self.conv_filter_1_shape, dtype=tf.float32, \
                     minval = 0.0, maxval = 2.0/self.cf1_var_factor * VAR_SCALE)
+                weights['cv1_b'] = tf.random_uniform(\
+                    (C1_NFILTERS,), dtype=tf.float32, \
+                    minval = 0.0, maxval = 2.0/self.cf1_var_factor * VAR_SCALE)
+
                 weights['cv2'] = tf.random_uniform(\
                     self.conv_filter_2_shape, dtype=tf.float32, \
                     minval = 0.0, maxval = 2.0/self.cf2_var_factor * VAR_SCALE)
+                weights['cv2_b'] = tf.random_uniform(\
+                    (C2_NFILTERS,), dtype=tf.float32, \
+                    minval = 0.0, maxval = 2.0/self.cf2_var_factor * VAR_SCALE)
+
                 weights['fc1'] = tf.random_uniform(\
                     self.fc_weights_1_shape, dtype=tf.float32,\
                     minval=0.0, maxval=2.0/self.w1_var_factor * VAR_SCALE )
+                weights['fc1_b'] = tf.random_uniform(\
+                    (FC_1_SIZE,), dtype=tf.float32,\
+                    minval=0.0, maxval=2.0/self.w1_var_factor * VAR_SCALE )
+
                 weights['fc2']= tf.random_uniform(\
                     self.fc_weights_2_shape, dtype=tf.float32,\
+                    minval=-1.0/self.w2_var_factor * VAR_SCALE,\
+                    maxval= 1.0/self.w2_var_factor * VAR_SCALE )
+                weights['fc2_b']= tf.random_uniform(\
+                    (N_ACTIONS,), dtype=tf.float32,\
                     minval=-1.0/self.w2_var_factor * VAR_SCALE,\
                     maxval= 1.0/self.w2_var_factor * VAR_SCALE )
         return weights
@@ -273,10 +305,12 @@ class network2(object):
         if self.version=='NEURAL':
             targs = np.array(targ_list, ndmin=2)
             s0s = np.array([s.grid for s in orig_states])
-            self.sess.run(self.updates, feed_dict={self.targ_var: targs, \
-                    self.input_layer: s0s} )
+            return self.sess.run([self.loss_op, self.updates], feed_dict=\
+                    {self.targ_var: targs, self.input_layer: s0s} )[0]
         else:
             raise Exception("Network version not set to NEURAL; cannot update")
+        print "Flag 99"
+        return -1
 
     def save_weights(self, dest, prefix=''):
         self._checkInit()
@@ -298,9 +332,13 @@ class reinforcement(object):
                 are 3x3 and only have component [AG] in any (of 6) locations.
         v1-fixedloc: the network learns to do act in a puzzles which have
                 the agent at a fixed location ->> 4 states.
+        v1-micro: like fixedloc, but *all* other spaces are blocked except
+                for A and G.
         v1-corner: This game has the network learn all variants of distance-1
                 games in which the 3x3 grid is in the same location.
         v1-all:  not yet implemented.
+
+        v0-fixedloc: extra simple - zeros.  Must have mna=1.
         ...
     '''
     def __init__(self, which_game, game_shape=(10,10), override=None,
@@ -313,14 +351,26 @@ class reinforcement(object):
                 'v1', self.env, oriented=True)
         self.D1_corner = self.sg.generate_all_states_fixedCenter(\
                 'v1', self.env)
+        self.D1_micro = self.sg.generate_all_states_micro('v1',self.env)
 
         pdgm, init_states = {
             'v1-single':    ('V1', [ self.D1_corner[2]]),
             'v1-oriented':  ('V1', self.D1_ocorner),
+            'v1-micro':    ('V1', self.D1_micro),
             'v1-corner':    ('V1', self.D1_corner),
             'v1-fixedloc':  ('V1', [self.D1_corner[3],  self.D1_corner[8],\
                               self.D1_corner[15], self.D1_corner[20] ]),
-            'v1-all':       'stub, not implemented yet!'
+            'v1-all':       'stub, not implemented yet!',
+
+            'v1-micro_fixedloc': ('V1', self.D1_micro+[self.D1_corner[3], \
+                self.D1_corner[8], self.D1_corner[15], self.D1_corner[20] ]),
+            
+            'v0-fixedloc':  ('V0', [self.env.getStateFromFile(\
+                            './data_files/states/3x3-basic-'+f, 'except')\
+                            for f in ['U.txt', 'R.txt', 'D.txt', 'L.txt']]),
+            'v0-single':    ('V0', [self.env.getStateFromFile(\
+                            './data_files/states/3x3-basic-U.txt', 'except')])
+
             }[which_game]
         self.which_game = which_game
         self.init_states = init_states
@@ -328,7 +378,7 @@ class reinforcement(object):
         self.rotational = override['rotation']
         # If load_weights_path==None, then initialize weights fresh&random.
         self.Net = network2(self.env, 'NEURAL', rot=self.rotational, override=\
-                override, load_weights_path=load_weights_path)
+                override, load_weights_path=load_weights_path, _game_version='v0') # TODO
 
         if not override==None:
             self.max_num_actions = override['max_num_actions'] if \
@@ -345,17 +395,17 @@ class reinforcement(object):
     def getStartState(self, order='rand'):
         return random.choice(self.init_states)
 
-    def _stateLogic(self, s0, Q0, a0_est, s1_est, rotation=0):
+    def _stateLogic(self, s0, Q0, a0_est, s1_est, rotation=0, printing=True):
         ''' (what should this be named?) This function interfaces the network's
             choices with the environment handler for necessary states.  '''
         # returns into: a0_valid, s1_valid, R, goal_reached, valid_action_flag
 
         motion_est = a0_est % N_ACTIONS
-        print "--> State logic: given", a0_est, a0_est%4, rotation, a0_est/4
+        if printing: print "--> State logic: given", a0_est, a0_est%4, rotation, a0_est/4
         valid_action_flag = self.env.checkIfValidAction(s0, motion_est)
         if valid_action_flag:
             goal_reached = self.env.isGoalReached(s1_est)
-            print "--> Yields valid", a0_est%4, a0_est/4
+            if printing: print "--> Yields valid", a0_est%4, a0_est/4
             return a0_est, s1_est, REWARD if goal_reached else NO_REWARD, \
                     goal_reached, valid_action_flag
 
@@ -365,7 +415,7 @@ class reinforcement(object):
         #a0_valid =np.argmax(np.exp(Q0[:4]) * self.env.getActionValidities(s0)) 
         #    + 4*np.random.randint(4) for random rotation as well.
                 
-        print "--> Yields invalid->", a0_valid, ACTION_NAMES[a0_valid%4],a0_valid/4
+        if printing: print "--> Yields invalid->", a0_valid, ACTION_NAMES[a0_valid%4],a0_valid/4
         return a0_valid, self.env.performAction(s0, a0_valid, 0), \
                 INVALID_REWARD, False, valid_action_flag
 
@@ -378,8 +428,8 @@ class reinforcement(object):
              - save_weights_to: path of directory to save weights to.
              - save_weight_freq: frequency of saving weights.
         '''
-        if not self.which_paradigm=='V1': 
-          raise Exception("Simple_Train is only implemented for V1 games.")
+        if not self.which_paradigm in ['V0','V1']: 
+          raise Exception("Simple_Train is only implemented for V0,V1 games.")
         if not extra_parameters==None:
           raise Exception("Simple_Train doesn't handle extra parameters currently.")
         init = tf.global_variables_initializer()
@@ -460,8 +510,8 @@ class reinforcement(object):
         return train_losses, test_losses, train_nsteps, test_nsteps
 
     def dev_checks(self):
-        if not self.which_paradigm=='V1':
-           raise Exception("Reinforcement session is only implemented for V1.")
+        if not self.which_paradigm in ['V0','V1']:
+           raise Exception("Reinforcement session is only implemented for V0,V1.")
 
     def _populate_default_params(self, params):
         if not 'saving' in params:
@@ -484,10 +534,13 @@ class reinforcement(object):
         self.Net.setSess(sess)
         sess.run(init)
         train_losses = [];  test_losses = []; # returned
+        train_reward = [];  test_reward = []; # returned
         train_nsteps = [];  test_nsteps = []; # returned
         Qvals = []
+
+        Buff=[]
         for episode in range(self.training_episodes):
-            # Save weights...
+            # Sa9ve weights...
             save_freq = params['saving']['freq']
             if save_freq>=0 and episode % save_freq==0:
                 self.Net.save_weights(params['saving']['dest'], prefix= \
@@ -495,45 +548,60 @@ class reinforcement(object):
             if episode%1000==0: 
                 print("Epoch #"+str(episode)+"/"+str(self.training_episodes))
             if params['mode']=='1-train-1-test':
-                TrQs, TrR, TrNum_a, TrBuff, qs = self._do_one_epoch(episode, \
-                        'train', params['buffer_updates'])
+                TrQs, TrR, TrLoss, TrNum_a, TrBuff, Q__data= self._do_one_epoch(episode, \
+                        'train', params['buffer_updates'], params['printing'])
                 if params['buffer_updates']:
-                    self.Net.update([b[0] for b in buff], [b[1] for b in buff]);
-                TeQs, TeR, TeNum_a, _,__ = \
-                        self._do_one_epoch(episode, 'test', buffer_me=False)
-                train_losses.append(TrR)
+                    if episode % 36 == 35:
+                        for b in Buff:
+                            #print len(b[0]);print b[0][1]; print b[0][2]
+                            self.Net.update(b[0][0], b[0][1]);
+                        Buff=[]
+                    else:
+                        Buff.append(TrBuff)
+                TeQs, TeR, TeLoss, TeNum_a, _, Q_data = \
+                        self._do_one_epoch(episode, 'test', buffer_me=False, \
+                                printing=params['printing'])
+                Q__data += Q_data
+                train_losses.append(TrLoss)
+                train_reward.append(TrR)
                 train_nsteps.append(TrNum_a)
-                test_losses.append(TeR)
+                test_losses.append(TeLoss)
+                test_reward.append(TeR)
                 test_nsteps.append(TeNum_a)
-                Qvals.append(qs)
-        return train_losses, test_losses, train_nsteps, test_nsteps, Qvals
+                for a,l,r,q_vec,_,tetr in Q__data:
+                    Qvals.append({'epoch':episode, 'action':a, 'reward':r, \
+                            'Q':q_vec, 'mode':tetr, 'loss':l})
+        return train_losses, test_losses, train_nsteps, test_nsteps, \
+                Qvals, train_reward, test_reward
 
 
-    def _do_one_epoch(self, episode, mode, buffer_me=True):
+    def _do_one_epoch(self, episode, mode, buffer_me=True, printing=False):
         Qs = []; losses=[]; steps=[]
         action_q_data = []
         update_buff = []
         s0 = self.getStartState()
         num_a = 0.0
-        print '\n\n'
+        if printing: print '\n\n'
+        last_loss=-1.0
         for nth_action in range(self.max_num_actions):
-            if mode=='train': print "\nState:"; self.env.displayGameState(s0)
+            if mode=='train' and printing: print "\nState:"; self.env.displayGameState(s0)
             if self.env.isGoalReached(s0): break
             num_a+=1
             Q0 = self.Net.getQVals([s0])
-
+            eps_chosen=False
             # Choose action
             if mode=='train':
                 randval = random.random()
-                if randval < EPSILON: 
+                if randval < EPSILON*(1-float(episode)/self.training_episodes) : 
+                    eps_chosen=True
                     a0_est = np.random.randint(Q0.shape[0])
-                    if mode=='train': print('Action: eps', a0_est)
+                    if mode=='train' and printing: print('Action: eps', a0_est)
                 else:
                     a0_est = np.argmax(Q0)
-                    if mode=='train': print('Action: select', a0_est)
+                    if mode=='train' and printing: print('Action: select', a0_est)
             elif mode=='test':
                 a0_est = np.argmax(Q0)
-                if mode=='train': print('Action: test', a0_est)
+                if mode=='train' and printing: print('Action: test', a0_est)
 
             if self.rotational:
                 s1_est = self.env.performAction(s0, a0_est%N_ACTIONS, a0_est/N_ACTIONS)
@@ -542,11 +610,8 @@ class reinforcement(object):
                 s1_est = self.env.performAction(s0, a0_est, 0)
 
             a0_valid, s1_valid, R, goal_reached, valid_flag = \
-                    self._stateLogic(s0, Q0, a0_est, s1_est, a0_est / 4)
+                    self._stateLogic(s0, Q0, a0_est, s1_est, a0_est / 4, printing)
 
-            if mode=='test':
-                s0=s1_valid;
-                continue
             targ = np.copy(Q0)
             targ[a0_est] = R
             if not goal_reached:
@@ -556,25 +621,35 @@ class reinforcement(object):
                 else:
                     targ[a0_est] -= GAMMA * a0_est
            
-            if buffer_me==False:
-                self.Net.update(orig_states=[s0], targ_list=[targ])
+            if buffer_me==False:# and printing:
+                if mode=='train':
+                    last_loss = self.Net.update(orig_states=[s0], targ_list=[targ])
+                else:
+                    last_loss = np.sum(np.square(targ-Q0))
+                if episode%200==0 and printing:
+                    if mode=='train': e= ' eps  ' if eps_chosen else ' chose'
+                    else:e=' test '
+                    if mode=='test': pmode=='test '
+                    else: pmode='train'
+                    print ' ',episode,"Last",pmode,"loss, reward: %1.4f"%last_loss,' ',int(R),\
+                            'a:',P_ACTION_NAMES[a0_est],e,'  targ-Q:',targ-Q0
             else:
                 update_buff.append(([s0], [targ], [Q0]))
 
-            if mode=='train':
+            if mode=='train' and printing:
                 print "Takes action", ACTION_NAMES[a0_est % N_ACTIONS],
                 print "with rotation",(a0_est / 4)*90, '; ', a0_est,
                 print "chosen valid action:", a0_valid
 
             updatedQ0 =  self.Net.getQVals([s0])
-            action_q_data.append( ( a0_est, R, Q0, updatedQ0 ) )
+            action_q_data.append( ( a0_est, last_loss, R, Q0, updatedQ0, mode ) )
             #print "degree and reward",R
             #print "Delta Q:", updatedQ0-Q0
             s0 = s1_valid
 
         if mode=='train':
             pass;#print "Final State:"; self.env.displayGameState(s0)
-        return Qs, R, num_a, update_buff, action_q_data
+        return Qs, R, last_loss, num_a, update_buff, action_q_data
     
 
 
@@ -585,17 +660,18 @@ class reinforcement(object):
 
 ''' Testing / results scripts '''
 
-def test_script(version, dest):
-    no_save=True
-    nsamples = 1 # 32
+def test_script(version, dest, no_save, saveweights=False):
+    iterator = 0;
+    nsamples = 5
     MNA = []
     #mnas = [4,6,8,10,20]
-    mnas = [1]
+    mnas = [2]
     #lrs = [0.01, 0.001]
-    lrs = [0.01]
-    training_eps = 200
+    lrs = [0.0001]#[0.001,0.0003]
+    training_eps = 15000
     weight_save_eps = None
     saved_time_str = get_time_str(dest)
+    weights=[]
     gamesize = (5,5)
     for n_mna, mna in enumerate(mnas):
       for n_lr, lr in enumerate(lrs):
@@ -607,33 +683,81 @@ def test_script(version, dest):
         #training_eps_ = training_eps * (1 if lr>0.001 else 2)
         training_eps_ = training_eps
         avg_losses = np.empty((nsamples, training_eps_, 2))
-        avg_steps = np.empty((nsamples, training_eps_, 2))
+        avg_steps  = np.empty((nsamples, training_eps_, 2))
+        avg_reward = np.empty((nsamples, training_eps_, 2))
         for ri in range(nsamples):
             ovr = {'max_num_actions': mna, 'learning_rate':lr, 'nepochs':training_eps_,
-                    'save_eps':weight_save_eps, 'rotation':True };
+                    'save_eps':weight_save_eps, 'rotation':False };
             r = reinforcement(version, override = ovr, game_shape=gamesize)
 
-            train, test, TrN, TeN, Q = r.run_session(\
-                    params={'buffer_updates':False, 'rotational':True}) # check!
-            #train, test, TrN, TeN = r.Simple_Train(\
-            #        save_weights_to=dest, save_weight_freq=weight_save_eps)
-
-            Tr = np.array(train)
-            Te = np.array(test)
-            avg_losses[ri,:,0] = Tr
-            avg_losses[ri,:,1] = Te
+            TrLoss, TeLoss, TrN, TeN, Q, TrR,TeR= r.run_session(params={\
+                    'buffer_updates':False, 'rotational':True, 'printing':False}) 
+            avg_losses[ri,:,:] = np.array([TrLoss, TeLoss]).T
             avg_steps [ri,:,:] = np.array([TrN, TeN]).T
-            r.displayQvals()
-            print '\nAgent',ri,'/'+str(nsamples)+'\t',"final train, test errors:", Tr[-1], \
-                           Te[-1], ';\t avg train, test errs:', np.mean(Tr), np.mean(Te),
+            avg_reward[ri,:,:] = np.array([TrR, TeR]).T
+            #r.displayQvals()
+            print '\nAgent',ri,'/'+str(nsamples)+'\t',"final train, test errors:", TrLoss[-1], \
+                           TeLoss[-1], ';\t avg train, test errs:', '%1.4f' % np.mean(TrLoss), \
+                                '%1.4f' % np.mean(TeLoss)
             if not ri%5: 
                 print ''
+
+            if saveweights: weights.append
         print "readout results: "
         print "\t avg tr, te losses:", list(np.mean(avg_losses[:,-1,:], axis=0))
         print "\t avg tr, te nsteps:", list(np.mean(avg_steps[:,-1,:], axis=0))
-        arr = np.array((avg_losses, avg_steps))
+        print "\t avg tr, te reward:", list(np.mean(avg_reward[:,-1,:], axis=0))
+        arr = np.array((avg_losses, avg_steps, avg_reward))
         #  arr shape: (2: losses & steps, nsamples, max_num_actions, 2: Tr & Te)
         MNA.append(arr)
+
+
+
+
+
+
+        # Plot Q's actions & rewards, per epoch:
+        ActMat3=np.zeros((3,training_eps,N_ACTIONS,2)) # Plot reward,loss,Q per epoch per action in train, test.
+        ActMat2=np.zeros((2,training_eps,N_ACTIONS,2)) # Plot loss,Q per epoch per action in train, test.
+
+        Q_sorted = []
+        for ep in range(training_eps): 
+            Q_sorted.append([])
+        for q in Q:
+            Q_sorted[q['epoch']].append(q)
+        for q_ in Q_sorted:
+            for q in q_:
+                if q['mode']=='train': tr_te = 0
+                else: tr_te = 1
+                ActMat3[0,q['epoch'],q['action'],tr_te] += q['reward']
+                ActMat3[1,q['epoch'],q['action'],tr_te] += q['loss']
+                ActMat3[2,q['epoch'],q['action'],tr_te] += q['Q'][q['action']]
+
+                ActMat2[0,q['epoch'],q['action'],tr_te] += q['loss']
+                ActMat2[1,q['epoch'],q['action'],tr_te] += q['Q'][q['action']]
+
+            
+        ActMat2 /= float(mna)
+
+        for e in range(1,training_eps): # Smoothing
+          for tt in range(2):
+            for a in range(4):
+              for lq in range(2):
+                if ActMat2[lq,e,a,tt]==0.0:
+                  ActMat2[lq,e,a,tt] = ActMat2[lq,e-1,a,tt];
+              for lqr in range(3):
+                if ActMat3[lqr,e,a,tt]==0.0:
+                  ActMat3[lqr,e,a,tt] = ActMat3[lqr,e-1,a,tt];
+
+        #save_as_Qplot2(ActMat2, os.path.join(dest,str(iterator)))
+        #iterator += 1
+        save_as_Qplot3(ActMat3, os.path.join(dest,str(iterator)), \
+                trialinfo='lr:'+str(lr)+', mna:'+str(mna)+', nepochs:'+\
+                str(training_eps)+", nsamples:"+str(nsamples)+\
+                ". Epsilon annealed linearly."  )
+        iterator += 1
+
+
         if no_save: continue
         np.save(os.path.join(dest,version) + \
                 '-mna-' + str(mna) + \
@@ -641,9 +765,12 @@ def test_script(version, dest):
                 '-' + str(gamesize).replace(', ', 'x') + \
                 '-nsamples' + str(nsamples) + \
                 '', arr)
+
+        
     if no_save: 
         # final sample only
 
+        '''
         f, ax=plt.subplots(4,4, sharex=True)
         f.tight_layout()
         plt.subplots_adjust(left=0.15, bottom=0.1, top=0.9)
@@ -666,36 +793,31 @@ def test_script(version, dest):
         f.suptitle("Q values for actions, rotations over epochs.  Correct: green.")
         ax[1,0].set_ylabel("rotations: 0, 90, 180, 270")
         ax[3,1].set_xlabel("Actions: U, R, D, L")
-        #plt.xlabel("Actions: U, R, D, L")
-#
-#        ax[0,1].plot(range(len(Q)),[np.exp(np.mean((q[0][3][1],q[0][3][5],q[0][3][9],q[0][3][13]))) \
-#                for q in Q], c='green') # r
-#        ax[1,0].plot(range(len(Q)),[np.exp(np.mean((q[0][3][2],q[0][3][6],q[0][3][10],q[0][3][14]))) \
-#                for q in Q], c='green') # d
-#        ax[1,1].plot(range(len(Q)),[np.exp(np.mean((q[0][3][3],q[0][3][7],q[0][3][11],q[0][3][15]))) \
-#                for q in Q], c='green') # l
-        plt.show()
-    
-    
-    
+        plt.plot()
+        '''
         return
     for i, mna in enumerate(mnas):
       for lr in lrs:
-        avg_losses, avg_steps = MNA[i]
         fn = os.path.join(dest,version) + \
                 '-mna-' + str(mna) + \
                 '-lr' + '%1.e' % lr + \
                 '-' + str(gamesize).replace(', ', 'x') + \
                 '-nsamples' + str(nsamples) + \
                 '.npy'
-        save_as_plot(fn, str(lr), str(mna), str(nsamples) )
+        save_as_plot1(fn, str(lr), str(mna), str(nsamples), which='L S')
         print '-----------------------------------------\n'
 
 #r = reinforcement('v1-fixedloc', override={'max_num_actions': 3, 'learning_rate':0.0001, 'nepochs':3001});
 #r.Simple_Train(save_weights_to='./storage/4-28/', save_weight_freq=200)
 #r.save_weights('./storage/4-28/')
 
-test_script('v1-single', './storage/4-29/')
+#test_script('v1-single', './storage/4-29/')
+#test_script('v1-micro', './storage/5-02/', no_save=False)
+#test_script('v1-single', './storage/5-02/', no_save=False)
+
+#test_script('v0-single', './storage/5-03/', no_save=False)
+test_script('v0-fixedloc', './storage/5-03/Qdumps/', no_save=False)
+#test_script('v1-micro_fixedloc', './storage/5-02/', no_save=False)
 # test_script('v1-oriented', './storage/4-25-p2/')
 #test_script('v1-corner', './storage/4-22-17-corner/')
 #test_script('v1-oriented', './storage/4-22-17-oriented-gamesize/')

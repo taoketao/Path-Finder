@@ -98,6 +98,7 @@ class state(object):
         if self.grid[loc[XDIM], loc[YDIM], mobileLayer]==1:   return mobileLayer
         if self.grid[loc[XDIM], loc[YDIM], agentLayer]==1:    return agentLayer
         if self.grid[loc[XDIM], loc[YDIM], goalLayer]==1:     return goalLayer
+        print "FLAG 98"
         return -1 # <- flag for 'empty square'
 
     def getAllLocs(self, m_or_i):
@@ -192,7 +193,7 @@ class environment_handler2(object):
         self.optDist = -1
     
     ''' Initialize a new state with post_state. '''
-    def post_state(self, parameters):
+    def post_state(self, parameters, except_init=False):
         '''
         Convention: parameters should be a dict of:
             'agent_loc' = (x,y),  'goal_loc' = (x,y), 'immobiles_locs' in:
@@ -206,7 +207,7 @@ class environment_handler2(object):
         if 'mobiles_locs' in parameters.keys():
             S.post_mobile_blocks(parameters['mobiles_locs'])
         # S.dump_state();
-        if not self.checkValidState(S, long_version=True):
+        if not except_init and not self.checkValidState(S, long_version=True):
             raise Exception("Invalid state attempted initialization: Flag 84")
         self.allstates.append(S)
         return S;
@@ -329,8 +330,9 @@ class environment_handler2(object):
         elif mode=='ret': return s;
         else: print "ERR tag 82"
 
-    def getStateFromFile(self, filename): return self._read_state_file(filename)
-    def _read_state_file(self, fn):
+    def getStateFromFile(self, filename, except_init='none'): 
+        return self._read_state_file(filename, except_init)
+    def _read_state_file(self, fn, except_init):
         '''
         _read_init_state_file: this function takes a file (sourced from main's 
         directory path) and processes it as an initialized state file.
@@ -353,7 +355,10 @@ class environment_handler2(object):
                     if c=='A': parameters['agent_loc'] = (x,y)
                     if c=='G': parameters['goal_loc'] = (x,y)
         self.states = []
-        return self.post_state(parameters)
+        if except_init=='except':
+            return self.post_state(parameters, True)
+        else:
+            return self.post_state(parameters, False)
 
     ''' Functions for accessing the optimal minimum number of steps required 
     to achieve the goal.  Used for testing. '''
@@ -368,6 +373,23 @@ class environment_handler2(object):
             return;
         print "Dist calculator not implemented for this state."
         return;
+
+    def _l1_dist(self, a, b): return abs(a[0]-b[0])+abs(a[1]-b[1])
+    def noise_imm_blocks(self, s):
+        for i in range(s.gridsz[0]):
+            for j in range(s.gridsz[1]):
+                query = s.getQueryLoc((i,j))
+                if np.random.rand()<0.5:
+                    if query in [ mobileLayer, immobileLayer]:
+                        s.grid[i,j,query] = 1-s.grid[i,j,query] # flip it
+        aloc = s.get_agent_loc()
+        gloc = s.get_goal_loc()
+        for loc in [ (aloc[0],aloc[1]+1), (aloc[0],aloc[1]-1), \
+                (aloc[0]-1,aloc[1]), (aloc[0]+1,aloc[1])]:
+            if loc[0]==gloc[0] and loc[1]==gloc[1]: continue
+            s._post(loc, immobileLayer)
+        
+        return s
 
 
 
@@ -462,6 +484,9 @@ class state_generator(object):
     def generate_all_states_fixedCenter(self, version, env, oriented=False):
         if version=='v1': 
             return self._generate_v1('default_center', env, oriented)
+    def generate_all_states_micro(self, version, env):
+        if version=='v1': 
+            return self._generate_micro('default_center', env)
 
     def generate_all_states_floatCenter(self, version):pass
     def generate_N_states_fixedCenter(self, version, replacement=False):pass
@@ -533,7 +558,7 @@ class state_generator(object):
             for iloc in ilocs:
                 iloc[XDIM] += rootloc[XDIM] + cmpLoc[XDIM]
                 iloc[YDIM] += rootloc[YDIM] + cmpLoc[YDIM]
-                parameters['immobiles_loc'].append(iloc)
+                parameters['immobiles_locs'].append(iloc)
 
             # Set the mobile block parameters
             if not 'mobiles_locs' in parameters:
@@ -567,6 +592,24 @@ class state_generator(object):
                     or b>=field_shape[YDIM]+centerloc[YDIM]:
                         parameters['immobiles_locs'].append((a,b))
         return parameters
+
+    def _generate_micro(self, rootloc, env):
+        ''' V1 EXTRA easy. These states are 3x3 and place the agent directly 
+        next to the goal AND block all other directions for agent. '''
+        field_shape = (3,3) # for all V1 states.
+        if rootloc=='default_center': rootloc=(1,1)
+        if not self._verifyWhere(rootloc, field_shape): sys.exit()
+        sp_u = self._initialize_component(None, rootloc, field_shape,\
+                'nextto_force', (0,0), (0,0,0), 'param')
+        sp_r = self._initialize_component(None, rootloc, field_shape,\
+                'nextto_force', (0,0), (0,0,1), 'param')
+        sp_d = self._initialize_component(None, rootloc, field_shape,\
+                'nextto_force', (0,0), (0,0,2), 'param')
+        sp_l = self._initialize_component(None, rootloc, field_shape,\
+                'nextto_force', (0,0), (0,0,3), 'param')
+        states = [env.post_state(sp) for sp in [sp_u, sp_r, sp_d, sp_l]]
+        return states
+
 
     def _generate_v1(self, rootloc, env, oriented):
         ''' V1, version one easiest state. These states are 3x3 and place the 
