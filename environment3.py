@@ -1,27 +1,35 @@
 '''                                                                           |
 Morgan Bryant, April 2017                                                     |
 Environment class for creating and handling world states.                     |
+environment3.py: this version intends to implement rotational capability.
 '''
 import numpy as np
 import sys, os, random
  
-agentLayer = 0;             UDIR=0;
-goalLayer = 1;              RDIR=1;
-immobileLayer = 2;          DDIR=2;
-mobileLayer = 3;            LDIR=3;
+agentLayer = 0;
+goalLayer = 1;
+immobileLayer = 2;
+mobileLayer = 3;
+LAYER_MAP = {'A':0, 'G':1, 'I':2, 'M':3}
 
-ROT0=0; ROT1=4; ROT2=8; ROT3=12;
+NORTH = UDIR = ACTION0 = 0
+EAST = RDIR = ACTION1 = 1
+SOUTH = DDIR = ACTION2 = 2
+WEST = LDIR = ACTION3 = 3
+cardinals = [NORTH, EAST, SOUTH, WEST]
+inv_cards = [SOUTH, WEST, NORTH, EAST]
+NO_MOVE = -1
+ROT0=10; 
+ROT90=11; 
+ROT180=12; 
+ROT270=13;
+rots = [ROT0, ROT90, ROT180, ROT270]
+invrots = [ROT180, ROT90, ROT0, ROT270]
+id_to_rot = { ROT0:0, ROT90:1, ROT180:2, ROT270:3 }
 
 XDIM = 0;  YDIM = 1;
 NUM_LAYERS = 4; # agent, goal, immobile, mobile
 
-LAYER_MAP = {'A':0, 'G':1, 'I':2, 'M':3}
-#all_actions = \
-#        [UDIR+ROT0, RDIR+ROT0, DDIR+ROT0, LDIR+ROT0,
-#         UDIR+ROT1, RDIR+ROT1, DDIR+ROT1, LDIR+ROT1,
-#         UDIR+ROT2, RDIR+ROT2, DDIR+ROT2, LDIR+ROT2,
-#         UDIR+ROT3, RDIR+ROT3, DDIR+ROT3, LDIR+ROT3]
-all_actions = [UDIR, RDIR, DDIR, LDIR]
 
 layer_names = {\
         0:"Agent Layer", \
@@ -64,6 +72,9 @@ class state(object):
     def post_goal(self, goal_loc):
         self._post(goal_loc, goalLayer)
         self.g_loc = goal_loc
+    def put_goal(self, new_loc):
+        self._del(self.g_loc, agentLayer)
+        self.post_goal(new_loc)
 
     ''' Public methods for the IMMOBILE BLOCKS '''
     def isImBlocked(self, loc): 
@@ -93,12 +104,12 @@ class state(object):
         self._post(nloc, mobileLayer)
 
     ''' Method: find out what kind of object is located at a queried location '''
-    def getQueryLoc(self, loc, except_filled=False):
+    def getQueryLoc(self, loc, exception=False):
         if self.grid[loc[XDIM], loc[YDIM],immobileLayer]==1:return immobileLayer
         if self.grid[loc[XDIM], loc[YDIM], mobileLayer]==1:   return mobileLayer
         if self.grid[loc[XDIM], loc[YDIM], agentLayer]==1:    return agentLayer
         if self.grid[loc[XDIM], loc[YDIM], goalLayer]==1:     return goalLayer
-        if not except_filled:
+        if not exception:
             print "FLAG 98"
         return -1 # <- flag for 'empty square'
 
@@ -182,16 +193,30 @@ class state(object):
             print ''
 
 
-class environment_handler2(object):
+class environment_handler3(object):
     '''
     class that handles objects, Rotational version.
     '''
-    def __init__(self, gridsize=None):
+    def __init__(self, gridsize, action_mode, \
+            default_agent_dir=NORTH, default_world_dir=NORTH,\
+            world_fill='placeholder'):
         if gridsize:
             self.gridsz = gridsize;
             assert(gridsize[0]==gridsize[1])
+        if 'egocentric'==action_mode and not world_fill in ['O','I','roll']:
+            raise Exception("Please provide a valid fill for this environment"\
+                            +"that facilitates map shifting.")
         self.allstates = []
         self.optDist = -1
+        self.action_mode = action_mode
+        self._AgentFwd = default_agent_dir
+        self._WorldTop = default_world_dir
+        self._WorldFill = world_fill # If the map shifts, place new: O or I
+
+    def Fwd(self): return self._AgentFwd + 0 % 4 # == self._AgentFwd
+    def Rgt(self): return self._AgentFwd + 1 % 4
+    def Bck(self): return self._AgentFwd + 2 % 4
+    def Lft(self): return self._AgentFwd + 3 % 4
     
     ''' Initialize a new state with post_state. '''
     def post_state(self, parameters, except_init=False):
@@ -219,6 +244,7 @@ class environment_handler2(object):
         if (action in ['d','v',DDIR]): return (loc[XDIM],loc[YDIM]+1) # because of file 
         if (action in ['r','>',RDIR]): return (loc[XDIM]+1,loc[YDIM])
         if (action in ['l','<',LDIR]): return (loc[XDIM]-1,loc[YDIM])
+        if (action in rots): return (loc[XDIM],loc[YDIM])
 
     ''' Assertion: Verifies that a state is consistent '''
     def checkValidState(self, State, long_version=False):
@@ -231,16 +257,103 @@ class environment_handler2(object):
             return True
         a_curloc = State.get_agent_loc();
         queryloc = self.newLoc(a_curloc, action)
-        ''' First, check if the agent tries to push a block, that it is valid: '''
+        ''' First, verify that the action is on the map: '''
+        if queryloc[XDIM]<0 or queryloc[XDIM]>=self.gridsz[XDIM] or \
+                queryloc[YDIM]<0 or queryloc[YDIM]>=self.gridsz[YDIM]:
+            return False
+        ''' Second, check if the agent tries to push a block, that it is valid: '''
         if State.isMoBlocked(queryloc)==1.0:
             blockQueryloc = self.newLoc(queryloc, action)
             if State.isImBlocked(blockQueryloc)==1.0: return False
-        ''' Second, check if the agent direction is not blocked by immobile:'''
+        ''' Third, check if the agent direction is not blocked by immobile:'''
         if State.isImBlocked(queryloc)==1.0: return False
         return True
 
     def rotate(self, state, rot): 
         state.rotate(rot); return state
+
+    ''' Returns the State that should result from the actionID [see head of 
+        file]. Based on this instance's specified action_mode, the action
+        will do diffent things. 
+        Specifically: return an 3-tuple of: 
+            1. Move agent in which cardinal direction, regardless of world move 
+            2. Move world in which cardinal direction, regardless of agent move
+            3. Rotate agent in world in ID*90 degrees, regardless of world rot
+            4. Rotate world in ID*90 degrees, regardless of agent rot'''
+    def _get_action_from_actionID(self, ID):
+        if self.action_mode == 'allocentric':
+            return (cardinals[ID], NO_MOVE,       ROT0, ROT0)
+        if self.action_mode == 'egocentric':
+            return (cardinals[ID], inv_cards[ID], ROT0, ROT0)
+        '''
+        if self.action_mode == 'rotSPIN_allocentric':
+            if ID == ACTION0: return (self.Fwd(), NO_MOVE, ROT0, ROT0)
+            if ID == ACTION1: return (NO_MOVE, NO_MOVE, rots[ID], ROT0)
+            if ID == ACTION2: return (NO_MOVE, NO_MOVE, rots[ID], ROT0)
+            if ID == ACTION3: return (NO_MOVE, NO_MOVE, rots[ID], ROT0)
+        if self.action_mode == 'rotSPIN_egocentric':
+            if ID == ACTION0: return (self.Fwd(), self.Bck(), ROT0,     ROT0)
+            if ID == ACTION1: return (NO_MOVE,    NO_MOVE,    rots[ID], invrots[ID])
+            if ID == ACTION2: return (NO_MOVE,    NO_MOVE,    ROT0,     rots[ID])
+            if ID == ACTION3: return (NO_MOVE,    NO_MOVE,    rots[ID], invrots[ID])
+        if self.action_mode == 'rotFwdBck_allocentric':
+            if ID == ACTION0: return (self.Fwd(), NO_MOVE, ROT0,     ROT0)
+            if ID == ACTION1: return (NO_MOVE,    NO_MOVE, rots[ID], ROT0)
+            if ID == ACTION2: return (self.Bck(), NO_MOVE, ROT0,     ROT0)
+            if ID == ACTION3: return (NO_MOVE,    NO_MOVE, rots[ID], ROT0)
+        if self.action_mode == 'rotFwdBck_egocentric':
+            if ID == ACTION0: return (self.Fwd(), self.Bck(), ROT0,     ROT0)
+            if ID == ACTION1: return (NO_MOVE,    NO_MOVE,    rots[ID], invrots[ID])
+            if ID == ACTION2: return (self.Fwd(), self.Bck(), ROT0,     ROT0)
+            if ID == ACTION3: return (NO_MOVE,    NO_MOVE,    rots[ID], invrots[ID])
+        '''
+
+    ''' User-facing method: given 1/4 actions, return the updated state '''
+    def performActionInMode(self, State, actionID, mode=None):
+        try: action_mode = (self.action_mode if mode==None else mode)
+        except:  raise Exception("No action mode specified.")
+        action_tuple = self._get_action_from_actionID(actionID)
+        print '\t',action_tuple
+        return self._performGenericAction(State, action_tuple)
+
+    ''' Given a tuple of (a_mv, w_mv, a_rot, w_rot), perform that update. '''
+    def _performGenericAction(self, State, action_tuple):
+        valid = self.checkValidState(State) and \
+                self.checkIfValidAction(State, action_tuple[0])
+        if not valid: return State # same state as before: current state.
+
+        tmp_1 = self._shiftAgent(State.copy(), action_tuple[0])
+        #tmp_2 = self.performAction(tmp_1, None, action_tuple[2], False) 
+        tmp_3 = self._shiftMap(tmp_1, action_tuple[1])
+        #tmp_4 = self._rotMap(tmp_3, action_tuple[3])
+        return tmp_3
+
+
+    ''' Given a world and direction, move only the Agent.'''
+    def _shiftAgent(self, S, shift):
+        al = agentLayer
+        if self._WorldFill=='roll':
+            if shift==UDIR: S.grid[:,:,al] = np.roll(S.grid[:,:,al], -1, axis=1)
+            if shift==RDIR: S.grid[:,:,al] = np.roll(S.grid[:,:,al],  1, axis=0)
+            if shift==DDIR: S.grid[:,:,al] = np.roll(S.grid[:,:,al],  1, axis=1)
+            if shift==LDIR: S.grid[:,:,al] = np.roll(S.grid[:,:,al], -1, axis=0)
+        elif self._WorldFill in ['O','I']:
+            raise Exception("Not implemented; roll presumed 'better' for now.")
+        return S
+
+    ''' Given a world and direction, move the entire map, including Agent.'''
+    def _shiftMap(self, S, shift):
+        if self._WorldFill=='roll':
+            if shift==UDIR: S.grid = np.roll(S.grid, -1, axis=1)
+            if shift==RDIR: S.grid = np.roll(S.grid,  1, axis=0)
+            if shift==DDIR: S.grid = np.roll(S.grid,  1, axis=1)
+            if shift==LDIR: S.grid = np.roll(S.grid, -1, axis=0)
+        elif self._WorldFill in ['O','I']:
+            raise Exception("Not implemented; roll presumed 'better' for now.")
+        return S
+
+    def _rotMap(self, S, shift):
+        pass
 
     ''' Returns the State that should result from the action.  if the action 
     was invalid, it returns the original state. newState: a bool flag for if 
@@ -260,7 +373,8 @@ class environment_handler2(object):
             newBlockLoc = self.newLoc(newAgentLoc, action)
             State_prime.put_mobile_block(newAgentLoc, newBlockLoc)
         State_prime.put_agent(newAgentLoc)
-        State_prime = self.rotate(State_prime, rot)
+        if rot>0 and not rot==ROT0:
+            State_prime = self.rotate(State_prime, rot)
         return State_prime
 
     ''' utilities '''
@@ -268,27 +382,25 @@ class environment_handler2(object):
         if State==None:
             return False;
         return np.array_equal(State.get_agent_loc(), State.get_goal_loc())
+
     # TODO: update this V
     def getActionValidities(self, s): return np.array(\
-        [ self.checkIfValidAction(s, a) for a in all_actions ], dtype='float32')
+        [ self.checkIfValidAction(s, a) for a in cardinals ], \
+            dtype='float32')
     def getGridSize(self): return self.gridsz;
 
     '''  Debugging methods  '''
-    def displayGameState(self, State=None, mode=1):
+    def displayGameState(self, State=None, exception=False):
         ''' Print the state of the game in a visually appealing way. '''
         for y in range(self.gridsz[YDIM]):
             l = []
             for x in range(self.gridsz[XDIM]):
-                if mode==1:
-                    flag = State.getQueryLoc((x,y))
-                elif mode==2:
-                    flag = State.getQueryLoc((x,y), except_filled=True)
+                flag = State.getQueryLoc((x,y), exception)
                 if flag==agentLayer: l += '@'
                 if flag==goalLayer: l += 'X'
                 if flag==immobileLayer: l += '#'
                 if flag==mobileLayer: l += 'O'
-                if mode==1 and flag==-1: l += ' '
-                if mode==2 and flag==-1: l += '-'
+                if flag==-1: l += '-'
             print ' '.join(l)
 
     def displayTransition(self, S1, S2):
@@ -649,7 +761,7 @@ def test_script1():
     #env = environment_handler((10,10))
 
     foo = state_generator((5,5))
-    env = environment_handler2((5,5))
+    env = environment_handler3((5,5))
     foo.ingest_component_prefabs("./data_files/components/")
     X = foo.generate_all_states_fixedCenter('v1', env)
 
@@ -689,10 +801,10 @@ def test_script3():
 
     for fn in ["./data_files/states/3x3-diag+M.txt"]:#, "./data_files/states/3x4-diag+M.txt"]:
       for act_seq in [ [('d',2), ('l',1)], [('d',1), ('r',2), ('r',3), ('l',0)]]:
-        env = environment_handler2()
+        env = environment_handler3()
         s0 = env.getStateFromFile(fn)
         print "\nvalid initial state:", not s0==None;
-        #env.displayGameState(s0); 
+        env.displayGameState(s0); 
         s0.dump_grid()
         #for action in [ ('d',0), ('d',0), ('r',0), ('u',0) ]:
         for action in act_seq:
@@ -700,7 +812,7 @@ def test_script3():
             s1 = env.performAction(s0, a,r);  print "\naction:",a,"action success:", \
                 env.checkIfValidAction(s0, a);  
             print "Goal reached?: ", env.isGoalReached(s1)
-            #env.displayGameState(s1);
+            env.displayGameState(s1);
             s1.dump_grid()
             s0=s1
             
@@ -717,19 +829,15 @@ def test_script3():
 
 
 def test_script4():
-    env = environment_handler2()
-    s_inits = [env.getStateFromFile('./data_files/states/3x3-basic-G'+f+'.txt', 
-            'except') for f in ['U','R','D','L']]
-    s0 = s_inits[2] # down
-    s0.dump_grid()
-    #for act_seq in [ [('d',2), ('l',1)], [('d',1), ('r',2), ('r',3), ('l',0)]]:
-    act_seq = [('r',0), ('r',0), ('r',0)]
-    for action in act_seq:
-        a, r = action
-        s1 = env.performAction(s0, a,r); 
-        print "\naction:",a,"action success:", env.checkIfValidAction(s0, a);  
-        s1.dump_grid()
-        s0=s1
+    for mode in ['egocentric', 'allocentric']:
+        print '--------------------------------------------------------'
+        env = environment_handler3((5,5), mode, world_fill='roll')
+        s0 = env.getStateFromFile('./data_files/states/3x3-basic-GU.txt', 'except')
+        env.displayGameState(s0, exception=True)
+        for mv in [RDIR, RDIR, RDIR, UDIR, RDIR, DDIR]:
+            s1 = env.performActionInMode(s0, mv)
+            env.displayGameState(s1, exception=True)
+            s0=s1
 
 
 if __name__=='__main__':
