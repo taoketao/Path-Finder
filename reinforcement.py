@@ -2,24 +2,87 @@
 Morgan Bryant, April 2017
 test framework for making sure the NN works - absent any reinforcement context
 '''
-import sys, time, random
+import sys, time
 import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
 from environment3 import *
 from network import *
+from scipy.sparse import coo_matrix
 
 ''' system/os constants '''
 COMPONENTS_LOC = "./data_files/components/"
 
 ''' [Helper] Constants '''
 N_ACTIONS = 4
+N_LAYERS = 4
 ACTIONS = [UDIR, RDIR, DDIR, LDIR]
 ACTION_NAMES = { UDIR:"UDIR", DDIR:"DDIR", RDIR:"RDIR", LDIR:"LDIR" }
 P_ACTION_NAMES = { UDIR:"^U^", DDIR:"vDv", RDIR:"R>>", LDIR:"<<L" }
 DEFAULT_EPSILON = 0.9
+ALL=-1
+A_LAYER=0
+G_LAYER=1
 
-''' reinforcemente: class for managing reinforcement training.  Note that 
+
+class session_results(object):
+    ''' Stores results from a session.  Stores state data sparsely.
+        Data entries: dicts of
+            num_a: num actions taken,
+            s0: original state with grid in sparse storage format,
+            actions_attempted: fixed size, Action ids with -1 for untaken actions,
+            success: bool of whether the goal was reached,
+            mode: "train" or "test"         '''
+    def __init__(self, n_training_epochs, n_episodes):
+        self._data = {} # should be nepochs x nepisodes
+        self.nepochs = n_training_epochs
+        self.nepisodes = n_episodes
+
+    def put(self, epoch, episode, data): 
+        if not 'mode' in data.keys(): raise Exception("Provide mode:train or test.")
+        if data['mode']=='train': mode = 0 
+        if data['mode']=='test' : mode = 1 
+        D = data.copy()
+        for d in D:
+            if d=='s0':
+                D[d] = data[d].copy()
+                D[d].grid = [coo_matrix(D[d].grid[:,:,i]) for i in range(N_LAYERS)]
+                D[d].sparse=True
+        self._data[(epoch, episode, mode)] = D
+
+    def get(self, p1, p2=None, p3=None): 
+        if p1 in ['train','test'] and p2==None and p3==None:
+            return self._get(ALL,ALL,p1)
+        if p1 in ['train','test'] and p2 in ['successes'] and p3==None:
+            return np.array( [[ 1.0 if x['success'] else 0.0 for x in X]\
+                        for X in self._get(ALL,ALL,p1)])
+        if p1 in ['train','test'] and p2 in ['nsteps'] and p3==None:
+            return np.array( [[ x['num_a'] for x in X]\
+                        for X in self._get(ALL,ALL,p1)])
+        if p1=='states' and p2==None and p3==None: # return state tups:
+            uniq_st = set()
+            for i in range(self.nepochs):
+                for j in range(self.nepisodes):
+                    st = self._data[(i,j,0)]['s0']
+                    st.sparsify()
+                    uniq_st.add(( st.grid[A_LAYER].row[0],\
+                                  st.grid[A_LAYER].col[0],\
+                                  st.grid[G_LAYER].row[0],\
+                                  st.grid[G_LAYER].col[0] ))
+            return sorted(list(uniq_st))
+        return self._get(p1,p2,p3)
+
+    def _get(self, epoch, episode, mode):
+        if mode=='train': mode = 0 
+        if mode=='test' : mode = 1 
+        if epoch == ALL: 
+            return [self._get(ep, episode, mode) for ep in range(self.nepochs)]
+        if episode == ALL: 
+            return [self._get(epoch, ep, mode) for ep in range(self.nepisodes)]
+        return self._data[(epoch, episode, mode)].copy()
+
+
+''' reinforcement: class for managing reinforcement training.  Note that 
     the training programs can take extra parameters; these are not to be 
     confused with the hyperparameters, set at the top of this file. '''
 class reinforcement(object):
@@ -44,7 +107,8 @@ class reinforcement(object):
         ...
     '''
     def __init__(self, which_game, frame, game_shape=(5,5), override=None,
-                 load_weights_path=None, data_mode=None):
+                 load_weights_path=None, data_mode=None, seed=None):
+        np.random.seed(seed)
         self.env = environment_handler3(game_shape, frame, world_fill='roll')
         self.sg = state_generator(game_shape)
         self.sg.ingest_component_prefabs(COMPONENTS_LOC)
@@ -55,7 +119,6 @@ class reinforcement(object):
                 'v1', self.env)
         self.D1_micro = self.sg.generate_all_states_micro('v1',self.env)
 
-        print 'which_game:', which_game
         pdgm, init_states = {
             'v1-single':    ('V1', [ self.D1_corner[2]]),
             'v1-oriented':  ('V1', self.D1_ocorner),
@@ -88,11 +151,13 @@ class reinforcement(object):
         self.init_states = init_states
         self.which_paradigm = pdgm
         self.data_mode = data_mode
-        self.rotational = override['rotation']
+        self.seed = seed
         net_params=None
         if 'netsize' in override:
             o = override['netsize']
-            net_params = { 'cv1_size':o[0], 'cv2_size':o[1], 'fc1_size':o[2] }
+            if not len(o)%2==0: raise Exception("Invalid network structure init.")
+            nlayers = len(o)/2
+            net_params = { o[i]+str(i+1)+'_size':o[i+nlayers] for i in range(nlayers) }
         if 'optimizer_tup' in override:
             opt = override['optimizer_tup']
         else: opt = ('sgd')
@@ -102,9 +167,9 @@ class reinforcement(object):
             self.epsilon_exploration = DEFAULT_EPSILON
             
         # If load_weights_path==None, then initialize weights fresh&random.
-        self.Net = network(self.env, 'NEURAL', rot=self.rotational, override=\
-                override, load_weights_path=load_weights_path, _game_version=\
-                'v0', net_params=net_params, _optimizer_type=opt)
+        self.Net = network(self.env, 'NEURAL', override=override, \
+                load_weights_path=load_weights_path, _game_version=\
+                'v0', net_params=net_params, _optimizer_type=opt, seed=seed)
 
         if not override==None:
             self.max_num_actions = override['max_num_actions'] if \
@@ -115,10 +180,7 @@ class reinforcement(object):
     def _stateLogic(self, s0, Q0, a0_est, s1_est, rotation=0, printing=True):
         ''' (what should this be named?) This function interfaces the network's
             choices with the environment handler for necessary states.  '''
-        # returns into: a0_valid, s1_valid, R, goal_reached, valid_action_flag
-
         motion_est = a0_est % N_ACTIONS
-        if printing: print "--> State logic: given", a0_est, a0_est%4, rotation, a0_est/4
         valid_action_flag = self.env.checkIfValidAction(s0, motion_est)
         if valid_action_flag:
             goal_reached = self.env.isGoalReached(s1_est)
@@ -126,14 +188,8 @@ class reinforcement(object):
             return a0_est, s1_est, REWARD if goal_reached else NO_REWARD, \
                     goal_reached, valid_action_flag
 
-        # if invalid action, preserve orientation: rotation = 0 degrees.
         a0_valid = np.argmax(np.exp(Q0[:4]) * self.env.getActionValidities(s0))
-        # Alternatively:
-        #a0_valid =np.argmax(np.exp(Q0[:4]) * self.env.getActionValidities(s0)) 
-        #    + 4*np.random.randint(4) for random rotation as well.
-                
-        if printing: print "--> Yields invalid->", a0_valid, ACTION_NAMES[a0_valid%4],a0_valid/4
-        return a0_valid, self.env.performAction(s0, a0_valid, 0), \
+        return a0_valid, self.env.performActionInMode(s0, a0_valid), \
                 INVALID_REWARD, False, valid_action_flag
 
     def dev_checks(self):
@@ -164,14 +220,14 @@ class reinforcement(object):
         sess = tf.Session()
         self.Net.setSess(sess)
         sess.run(init)
-        train_losses = [];  test_losses = []; # returned
-        train_reward = [];  test_reward = []; # returned
-        train_nsteps = [];  test_nsteps = []; # returned
-        Qvals = [];
-        storage = [train_losses, test_losses, train_reward, test_reward, \
-                train_nsteps, test_nsteps, Qvals]
+        
+        episode_results = session_results(self.training_epochs, \
+                len(self.init_states))
+
         Buff=[]
-        for epoch in range(self.training_epochs):
+        with sess.as_default():
+          tf.set_random_seed(self.seed)
+          for epoch in range(self.training_epochs):
             # Save weights
             save_freq = params['saving']['freq']
             if save_freq>=0 and epoch % save_freq==0:
@@ -184,45 +240,26 @@ class reinforcement(object):
                 next_states = self.init_states
             elif params['present_mode']=='shuffled':
                 next_states = np.random.permutation(self.init_states)
-            elif params['present_mode']=='random':
-                next_states = np.random.choice(self.init_states, replace=True,\
-                        size=len(self.init_states))
             else: raise Exception("No provided or default data mode.")
-#            print ''
-#            print 'Epoch', epoch, 
 
-            for s_i,s0 in enumerate(next_states):
-#                print 'ep',s_i, ', ',
-                ret = self._do_one_episode(s0, epoch, 'train', 
-                         params['buffer_updates'], params['printing'])
+            for episode,s0 in enumerate(next_states):
+                ret = self._do_one_episode(s0, epoch, 'train')
+                episode_results.put(epoch, episode,  \
+                      { 's0': s0.copy(), \
+                        'num_a': ret[0], \
+                        'success': ret[1], \
+                        'attempted_actions':ret[2], \
+                        'mode': 'train' })
+            for episode,s0 in enumerate(next_states):
+                ret = self._do_one_episode(s0, epoch, 'test')
+                episode_results.put(epoch, episode,  \
+                      { 's0': s0.copy(), \
+                        'num_a': ret[0], \
+                        'success': ret[1], \
+                        'attempted_actions':ret[2], \
+                        'mode': 'test' })
 
-                TrQs, TrR, TrLoss, TrNum_a, TrBuff, Q__data = ret
-
-                if params['buffer_updates']:
-                    if epoch % 36 == 35:
-                        for b in Buff:
-                            self.Net.update(b[0][0], b[0][1]);
-                        Buff=[]
-                    else:
-                        Buff.append(TrBuff)
-
-                TeQs, TeR, TeLoss, TeNum_a, _, Q_data = \
-                        self._do_one_episode(s0, epoch, 'test', buffer_me=False, \
-                                printing=params['printing'])
-
-                Q__data += Q_data
-                train_losses.append(TrLoss)
-                train_reward.append(TrR)
-                train_nsteps.append(TrNum_a)
-                test_losses.append(TeLoss)
-                test_reward.append(TeR)
-                test_nsteps.append(TeNum_a)
-                for a,l,r,q_data,_,tetr,st in Q__data:
-                    Qvals.append({'epoch':epoch, 'action':a, 'reward':r, \
-                            'Q':q_data, 'mode':tetr, 'loss':l, 'state':st})
-
-
-            if epoch%1000==0: 
+            if epoch%250==0: 
                 print("Epoch #"+str(epoch)+"/"+str(self.training_epochs))
                 if not params['printing']: 
                     continue
@@ -235,56 +272,56 @@ class reinforcement(object):
                     print('\t'+P_ACTION_NAMES[Qvals[wq]['action']]+': ['+\
                             ', '.join(["%1.5f"% p for p in Qvals[wq]['Q']])+\
                             ']; corr?: '+str(int(Qvals[wq]['reward'])))
-        return train_losses, test_losses, train_nsteps, test_nsteps, \
-                Qvals, train_reward, test_reward
+
+        return episode_results
+
+    def _get_epsilon(self, epoch):
+        if type(self.epsilon_exploration)==float:
+            return self.epsilon_exploration
+        elif self.epsilon_exploration=='lindecay':
+            return 1-float(epoch)/self.training_epochs
+        elif self.epsilon_exploration=='1/x':
+            return 1.0/(epoch+1)
+        elif self.epsilon_exploration[:4]=='1/nx':
+            return float(self.epsilon_exploration[4:])/(epoch+1)
+        else: raise Exception("Epsilon strategy not implemented")
 
 
-    def _do_one_episode(self, s0, epoch, mode, buffer_me=True, printing=False):
+    def _do_one_episode(self, _s0, epoch, mode, buffer_me=True, printing=False):
         Qs = []; losses=[]; steps=[]
-        action_q_data = []
         update_buff = []
-        num_a = 0.0
+        num_a = 0
+        wasGoalReached = False
         if printing: print '\n\n'
         last_loss=-1.0
+        states_log = [_s0]
+        attempted_actions = -1*np.ones((self.max_num_actions,))
         for nth_action in range(self.max_num_actions):
-            if mode=='train' and printing: print "\nState:"; self.env.displayGameState(s0)
-            if self.env.isGoalReached(s0): break
+            s0 = states_log[-1]
+            if self.env.isGoalReached(s0): 
+               wasGoalReached=True
+               break
             num_a+=1
             Q0 = self.Net.getQVals([s0])
             eps_chosen=False
+
             # Choose action
             if mode=='train':
-                randval = random.random()
-                if type(self.epsilon_exploration)==float:
-                    _epsilon = self.epsilon_exploration
-                elif self.epsilon_exploration=='lindecay':
-                    _epsilon = 1-float(epoch)/self.training_epochs
-                elif self.epsilon_exploration=='1/x':
-                    _epsilon = 1.0/(epoch+1)
-                elif self.epsilon_exploration[:4]=='1/nx':
-                    _epsilon = float(self.epsilon_exploration[4:])/(epoch+1)
-                else: raise Exception("Epsilon strategy not implemented")
-                if epoch%70==69: print "epsilon at epoch", epoch, ':', _epsilon, self.training_epochs
-                if randval < _epsilon: 
+                _epsilon = self._get_epsilon(epoch)
+                if np.random.rand() < _epsilon: 
                     eps_chosen=True
-                    a0_est = np.random.randint(Q0.shape[0])
-                    if mode=='train' and printing: print('Action: eps', a0_est)
+                    a0_est = np.random.choice(ACTIONS)
                 else:
                     a0_est = np.argmax(Q0)
-                    if mode=='train' and printing: print('Action: select', a0_est)
             elif mode=='test':
                 a0_est = np.argmax(Q0)
-                if mode=='train' and printing: print('Action: test', a0_est)
 
-            if self.rotational:
-                raise Exception("todo: please implement this properly.")
-                s1_est = self.env.performAction(s0, a0_est%N_ACTIONS, a0_est/N_ACTIONS)
-                # ^ equivalent to: ... a0_est % N_ROTATIONS, a0_est / N_ROTATIONS)
-            else:
-                s1_est = self.env.performAction(s0, a0_est, 0)
+            attempted_actions[nth_action] = a0_est
 
-            a0_valid, s1_valid, R, goal_reached, valid_flag = \
-                    self._stateLogic(s0, Q0, a0_est, s1_est, a0_est / 4, printing)
+            s1_est = self.env.performActionInMode(s0, a0_est)
+
+            tmp = self._stateLogic(s0, Q0, a0_est, s1_est, a0_est / 4, printing)
+            a0_valid, s1_valid, R, goal_reached, valid_flag = tmp
 
             targ = np.copy(Q0)
             targ[a0_est] = R
@@ -294,36 +331,13 @@ class reinforcement(object):
                     targ[a0_est] -= GAMMA * np.max(Q1)
                 else:
                     targ[a0_est] -= GAMMA * a0_est
+            if mode=='train':
+                self.Net.update(orig_states=[s0], targ_list=[targ])
            
-            if buffer_me==False:# and printing:
-                if mode=='train':
-                    last_loss = self.Net.update(orig_states=[s0], targ_list=[targ])
-                else:
-                    last_loss = np.sum(np.square(targ-Q0))
-                if epoch%200==0 and printing:
-                    if mode=='train': e= ' eps  ' if eps_chosen else ' chose'
-                    else:e=' test '
-                    if mode=='test': pmode=='test '
-                    else: pmode='train'
-                    print ' ',epoch,"Last",pmode,"loss, reward: %1.4f"%last_loss,' ',int(R),\
-                            'a:',P_ACTION_NAMES[a0_est],e,'  targ-Q:',targ-Q0
-            else:
-                update_buff.append(([s0], [targ], [Q0]))
+            states_log.append(s1_valid)
 
-            if mode=='train' and printing:
-                print "Takes action", ACTION_NAMES[a0_est % N_ACTIONS],
-                print "with rotation",(a0_est / 4)*90, '; ', a0_est,
-                print "chosen valid action:", a0_valid
-
-            updatedQ0 =  self.Net.getQVals([s0])
-            action_q_data.append( ( a0_est, last_loss, R, Q0, updatedQ0, mode, s0 ) )
-            #print "degree and reward",R
-            #print "Delta Q:", updatedQ0-Q0
-            s0 = s1_valid
-
-        if mode=='train':
-            pass;#print "Final State:"; self.env.displayGameState(s0)
-        return Qs, R, last_loss, num_a, update_buff, action_q_data
+        if self.env.isGoalReached(states_log[-1]): wasGoalReached=True
+        return num_a, wasGoalReached, attempted_actions
     
 
 

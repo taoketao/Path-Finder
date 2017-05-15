@@ -159,11 +159,19 @@ def save_as_Qplot3(mat, save_to_loc, trialinfo='[none provided]'):
     plt.close()
 
 
+
+
+
+
+
+
+
 def _dist(x,y): return abs(x[0]-y[0])+abs(x[1]-y[1])
 
 def _make_str(s_id, gridsz, trte, debug=False):
     if trte==0: s ='train\n'
     if trte==1: s ='test \n'
+    if trte==-1: s ='    '
     for i in range(gridsz[0]):
         for j in range(gridsz[1]):
             if (i==s_id[1] and j==s_id[0]):
@@ -174,11 +182,92 @@ def _make_str(s_id, gridsz, trte, debug=False):
                 s += '-'
         if not i==gridsz[0]-1:
             s += '\n'
+            if trte==-1: s += '     '
     if debug:
         if _dist((s_id[0], s_id[1]), (s_id[2], s_id[3])):
             s += '\n('+str(s_id[2]-s_id[0])+', '+str(s_id[3]-s_id[1])+')\n'
         s += str(s_id)
     return s
+
+def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
+        tr2=None, te2=None):
+    #f, ax = plt.subplots(lX*2, lY*2, sharex=True)
+    if centric in ['allocentric','egocentric']:
+        twoplots = False
+    elif type(centric)==list and len(centric)==2: 
+        twoplots = True
+    else:
+        raise Exception("Please tell me if this is egocentric, allocentric, etc")
+
+    Tr = np.empty(tr.shape)
+    Te = np.empty(te.shape)
+    if twoplots: 
+        Tr2 = np.empty(tr2.shape)
+        Te2 = np.empty(te2.shape)
+    for i in range(tr.shape[0] / smoothing):
+        tr_val = np.mean(tr[i*smoothing:(i+1)*smoothing,:], axis=0)
+        te_val = np.mean(te[i*smoothing:(i+1)*smoothing,:], axis=0)
+        for smth in range(smoothing):
+            Tr[i*smoothing+smth,:] = tr_val
+            Te[i*smoothing+smth,:] = te_val
+        if not twoplots: 
+            continue
+        tr2_val = np.mean(tr2[i*smoothing:(i+1)*smoothing,:], axis=0)
+        te2_val = np.mean(te2[i*smoothing:(i+1)*smoothing,:], axis=0)
+        for smth in range(smoothing):
+            Tr2[i*smoothing+smth,:] = tr2_val
+            Te2[i*smoothing+smth,:] = te2_val
+    
+    #f,ax = plt.subplots(2,2, sharex=True, sharey=True)
+    gs = gridspec.GridSpec(2, 3)
+    plt.subplots_adjust(\
+            left=0.1, bottom=0.1, right=0.9, top=0.9, wspace=0.5, hspace=0.5)
+    ax={}
+    ax[(0,0)] = plt.subplot(gs[0,0])
+    ax[(0,1)] = plt.subplot(gs[0,1], sharey = ax[(0,0)])
+    ax[(1,0)] = plt.subplot(gs[1,0], sharey = ax[(0,0)])
+    ax[(1,1)] = plt.subplot(gs[1,1], sharey = ax[(0,0)])
+    plt.gca().set_ylim([-0.1,1.1])
+
+
+    colors = ['blue','red','green','khaki']
+    darkcolors = ['dark'+c for c in colors]
+
+    for i in range(Tr.shape[1]):
+        ax[(0,0)].plot(Tr[:,i], c=colors[i])
+        ax[(0,1)].plot(Te[:,i], c=colors[i])
+        if twoplots:
+            ax[(0,0)].plot(Tr2[:,i], c=darkcolors[i])
+            ax[(0,1)].plot(Te2[:,i], c=darkcolors[i])
+    ax[(1,0)].plot(np.mean(Tr, axis=1), c='orange')
+    ax[(1,1)].plot(np.mean(Te, axis=1), c='orange')
+    if twoplots:
+        ax[(1,0)].plot(np.mean(Tr2, axis=1), c='black')
+        ax[(1,1)].plot(np.mean(Te2, axis=1), c='black')
+    ax[(0,0)].set_ylabel("accuracy per epoch by start state")
+    ax[(1,0)].set_ylabel("accuracy per epoch")
+    ax[(1,0)].set_xlabel("Training")
+    ax[(1,1)].set_xlabel("Testing")
+    plt.gcf().set_size_inches(16,10)
+    s2 = "Successes taken per state, per epoch."
+    if not states==None:
+        for sc in range(len(states)):
+            s2 += '\n    '+colors[sc]+':\n'+ _make_str(states[sc],(5,5),-1)
+    if twoplots:
+        s2 += '\nLight / orange: '+centric[0]
+        s2 += '\nDark / black: '+centric[1]
+    ax[(1,1)].text(1.2*Tr.shape[0],0, s2, fontsize=14, family='monospace')
+    s.replace('-0','TMP').replace('_',':').replace('-','  ').replace('TMP','-0')
+    plt.gcf().suptitle( s[s.find('v'):s.find(' successes')])
+
+    plt.plot()
+    #plt.show()
+    plt.savefig(s)
+    plt.close()
+
+
+
+
 
 
 

@@ -40,7 +40,7 @@ C1_NFILTERS = 32;       # number of filters in conv layer #1
 C1_SZ = (3,3);          # size of conv #2's  window
 C2_NFILTERS = 32;       # number of filters in conv layer #2
 C2_SZ = (3,3);          # size of conv #2's  window
-FC_1_SIZE = 72;        # number of outputs in dense layer #1
+FC_3_SIZE = 72;        # number of outputs in dense layer #1
 N_ROTATIONS = 4; # FC layer 2 out size: # actions or # actions + # rotations.
 
 ''' utility functions '''
@@ -68,8 +68,7 @@ def get_time_str(path, prefix=''):
      - <constructor>
      - setSess(tensorflow session)
      - getQVals(state)                      -> states: see environment.py
-     - update(states, target_Qvals)
-'''
+     - update(states, target_Qvals)         '''
 class network(object):
     ''' USER-FACING network constructor. Parameters:
         _env: Must provide an environment handler object.  Among various 
@@ -81,7 +80,7 @@ class network(object):
         _optimizer_type: one of ('sgd'), ('adam', <eps>),.. for now. '''
     def __init__(self, _env, _version="NEURAL", _batch_off=True, _train=True,\
             _optimizer_type=None, override=None, load_weights_path=None, \
-            rot=False, _game_version='v1', net_params=None):
+            rot=False, _game_version='v1', net_params=None, seed=None):
         ''' inputs: shape [batch, X, Y, 4-action-layers]. '''
         self.gridsz = _env.getGridSize()
         self.env = _env
@@ -94,7 +93,19 @@ class network(object):
             self.learning_rate = override['learning_rate']
         else:
             self.learning_rate = LEARNING_RATE
+        self.layer_types = net_params.keys()
 
+        if not seed==None:
+            tf.set_random_seed(seed)
+        self.seed = seed
+
+        if 'cv1_size' in self.layer_types and 'cv2_size' in self.layer_types \
+                and 'fc3_size' in self.layer_types:
+            self._construct_2conv_2fc_network(load_weights_path, _train, \
+                    _optimizer_type)
+
+    def _construct_2conv_2fc_network(self, load_weights_path, _train, \
+            _optimizer_type):
         self.nconvs_1 = (self.gridsz[XDIM]-2, self.gridsz[YDIM]-2)
         self.nconvs_2 = (self.gridsz[XDIM]-4, self.gridsz[YDIM]-4)
 
@@ -107,20 +118,20 @@ class network(object):
         self.conv_filter_2_shape = (C2_SZ[0], C2_SZ[1], self.cv1_size, self.cv2_size)
         conv_strides_1 = (1,1,1,1)
         conv_strides_2 = (1,1,1,1)
-        self.fc_weights_1_shape =\
-                (self.cv2_size*np.prod(self.nconvs_2), self.fc1_size)
-        self.fc_weights_2_shape = (self.fc1_size, self.fc2_size)
+        self.fc_weights_3_shape =\
+                (self.cv2_size*np.prod(self.nconvs_2), self.fc3_size)
+        self.out_weights_4_shape = (self.fc3_size, self.out_size)
 
         #   helper factors
         try: np_var_factor = N_LAYERS * self.gridsz[XDIM] * self.gridsz[YDIM]
         except: pass
-        try: self.cf1_var_factor = np.prod(self.conv_filter_1_shape)
+        try: self.c1_var_factor = np.prod(self.conv_filter_1_shape)
         except: pass
-        try: self.cf2_var_factor = np.prod(self.conv_filter_2_shape)
+        try: self.c2_var_factor = np.prod(self.conv_filter_2_shape)
         except: pass
-        try: self.w1_var_factor = np.prod(self.fc_weights_1_shape)
+        try: self.f3_var_factor = np.prod(self.fc_weights_3_shape)
         except: pass
-        try: self.w2_var_factor = np.prod(self.fc_weights_2_shape)
+        try: self.o4_var_factor = np.prod(self.out_weights_4_shape)
         except: pass
 
         ''' Initialization Values.  Random init if weights are not provided. 
@@ -138,14 +149,14 @@ class network(object):
                 name='cv2', trainable=_train, dtype=tf.float32)
         self.conv_bias_2 = tf.Variable(inits['cv2_b'], \
                 name='cv2_b', trainable=_train, dtype=tf.float32)
-        self.fc_weights_1 = tf.Variable(inits['fc1'], \
-                name='fc1', trainable=_train)
-        self.fc_bias_1 = tf.Variable(inits['fc1_b'], \
-                name='fc1_b', trainable=_train)
-        self.fc_weights_2 = tf.Variable(inits['fc2'], \
-                name='fc2', trainable=_train)
-        self.fc_bias_2 = tf.Variable(inits['fc2_b'], \
-                name='fc2_b', trainable=_train)
+        self.fc_weights_1 = tf.Variable(inits['fc3'], \
+                name='fc3', trainable=_train)
+        self.fc_bias_1 = tf.Variable(inits['fc3_b'], \
+                name='fc3_b', trainable=_train)
+        self.fc_weights_2 = tf.Variable(inits['out4'], \
+                name='out4', trainable=_train)
+        self.fc_bias_2 = tf.Variable(inits['out4_b'], \
+                name='out4_b', trainable=_train)
 
         ''' Layer Construction (ie forward pass construction) '''
         self.input_layer = tf.placeholder(tf.float32, [None,                  \
@@ -173,13 +184,13 @@ class network(object):
         else:
             self.l2_act = tf.nn.relu( self.l2 + self.conv_bias_2 )
         self.l2_flat = tf.contrib.layers.flatten(self.l2_act)
-        self.l3 = tf.matmul(self.l2_flat, self.fc_weights_1, name='fc1')
+        self.l3 = tf.matmul(self.l2_flat, self.fc_weights_1, name='fc3')
         if self.net_params['dropout'] in ['all', 'last']:
             l3_dropped = tf.nn.dropout(self.l3, 0.5)
             self.l3_act = tf.nn.relu( l3_dropped + self.fc_bias_1 )
         else:
             self.l3_act = tf.nn.relu( self.l3 + self.fc_bias_1 )
-        self.l4 = tf.matmul(self.l3_act, self.fc_weights_2, name='fc2')
+        self.l4 = tf.matmul(self.l3_act, self.fc_weights_2, name='out4')
         self.output_layer = tf.nn.tanh(self.l4+self.fc_bias_2, name='output')
 
         self.trainable_vars = [self.conv_filter_1, self.conv_filter_2, \
@@ -209,8 +220,8 @@ class network(object):
         if self.net_params==None:
             self.cv1_size = C1_NFILTERS
             self.cv2_size = C2_NFILTERS
-            self.fc1_size = FC_1_SIZE
-            self.out_size = self.fc2_size = N_ACTIONS
+            self.fc3_size = FC_4_SIZE
+            self.out_size = N_ACTIONS
             return
         if 'cv1_size' in self.net_params:
                 self.cv1_size = self.net_params['cv1_size']
@@ -218,21 +229,23 @@ class network(object):
         if 'cv2_size' in self.net_params:
                 self.cv2_size = self.net_params['cv2_size']
         else:   self.cv2_size = C2_NFILTERS
-        if 'fc1_size' in self.net_params:
-                self.fc1_size = self.net_params['fc1_size']
-        else:   self.fc1_size = FC_1_SIZE
+        if 'fc3_size' in self.net_params:
+                self.fc3_size = self.net_params['fc3_size']
+        else:   self.fc3_size = FC_3_SIZE
 
         if not 'action_mode' in self.net_params:
-            self.fc2_size = N_ACTIONS
-        elif self.net_params['action_mode'] in ['slide_worldcentric',\
-                'slide_egocentric', 'rotSPIN_worldcentric', 'rotSPIN_egocentric',
-                'rotFwdBack_worldcentric', 'rotFwdBack_egocentric']:
-            self.fc2_size = N_ACTIONS
+            self.out_size = N_ACTIONS
+        elif self.net_params['action_mode'] in \
+                    ['slide_worldcentric','slide_egocentric']:
+            self.out_size = N_ACTIONS
+        elif self.net_params['action_mode'] in \
+                    ['rotSPIN_worldcentric', 'rotSPIN_egocentric',\
+                    'rotFwdBack_worldcentric', 'rotFwdBack_egocentric']:
+            raise Exception("Warning: rotation actions are currently unsupported.")
         else:
-            print("Warning: unspecified action mode can cause intention ambiguities!")
+            raise Exception("Warning: unspecified action mode is ambiguous.")
         if not 'dropout' in self.net_params:
             self.net_params['dropout'] = 'all'
-        self.out_size = self.fc2_size
 
     
     def _initialize_weights(self, initialization, mode='1/n'):
@@ -245,34 +258,34 @@ class network(object):
         else:
             if mode=='1/n':
                 weights['cv1'] = tf.random_uniform(\
-                    self.conv_filter_1_shape, dtype=tf.float32, \
-                    minval = 0.0, maxval = 2.0/self.cf1_var_factor * VAR_SCALE)
+                    self.conv_filter_1_shape, dtype=tf.float32, seed=self.seed,\
+                    minval = 0.0, maxval = 2.0/self.c1_var_factor * VAR_SCALE)
                 weights['cv1_b'] = tf.random_uniform(\
-                    (self.cv1_size,), dtype=tf.float32, \
-                    minval = 0.0, maxval = 2.0/self.cf1_var_factor * VAR_SCALE)
+                    (self.cv1_size,), dtype=tf.float32, seed=self.seed,\
+                    minval = 0.0, maxval = 2.0/self.c1_var_factor * VAR_SCALE)
 
                 weights['cv2'] = tf.random_uniform(\
-                    self.conv_filter_2_shape, dtype=tf.float32, \
-                    minval = 0.0, maxval = 2.0/self.cf2_var_factor * VAR_SCALE)
+                    self.conv_filter_2_shape, dtype=tf.float32, seed=self.seed, \
+                    minval = 0.0, maxval = 2.0/self.c2_var_factor * VAR_SCALE)
                 weights['cv2_b'] = tf.random_uniform(\
-                    (self.cv2_size,), dtype=tf.float32, \
-                    minval = 0.0, maxval = 2.0/self.cf2_var_factor * VAR_SCALE)
+                    (self.cv2_size,), dtype=tf.float32, seed=self.seed, \
+                    minval = 0.0, maxval = 2.0/self.c2_var_factor * VAR_SCALE)
 
-                weights['fc1'] = tf.random_uniform(\
-                    self.fc_weights_1_shape, dtype=tf.float32,\
-                    minval=0.0, maxval=2.0/self.w1_var_factor * VAR_SCALE )
-                weights['fc1_b'] = tf.random_uniform(\
-                    (self.fc1_size,), dtype=tf.float32,\
-                    minval=0.0, maxval=2.0/self.w1_var_factor * VAR_SCALE )
+                weights['fc3'] = tf.random_uniform(\
+                    self.fc_weights_3_shape, dtype=tf.float32, seed=self.seed,\
+                    minval=0.0, maxval=2.0/self.f3_var_factor * VAR_SCALE )
+                weights['fc3_b'] = tf.random_uniform(\
+                    (self.fc3_size,), dtype=tf.float32, seed=self.seed,\
+                    minval=0.0, maxval=2.0/self.f3_var_factor * VAR_SCALE )
 
-                weights['fc2']= tf.random_uniform(\
-                    self.fc_weights_2_shape, dtype=tf.float32,\
-                    minval=-1.0/self.w2_var_factor * VAR_SCALE,\
-                    maxval= 1.0/self.w2_var_factor * VAR_SCALE )
-                weights['fc2_b']= tf.random_uniform(\
-                    (self.fc2_size,), dtype=tf.float32,\
-                    minval=-1.0/self.w2_var_factor * VAR_SCALE,\
-                    maxval= 1.0/self.w2_var_factor * VAR_SCALE )
+                weights['out4']= tf.random_uniform(\
+                    self.out_weights_4_shape, dtype=tf.float32, seed=self.seed,\
+                    minval=-1.0/self.o4_var_factor * VAR_SCALE,\
+                    maxval= 1.0/self.o4_var_factor * VAR_SCALE )
+                weights['out4_b']= tf.random_uniform(\
+                    (self.out_size,), dtype=tf.float32, seed=self.seed,\
+                    minval=-1.0/self.o4_var_factor * VAR_SCALE,\
+                    maxval= 1.0/self.o4_var_factor * VAR_SCALE )
         return weights
 
 

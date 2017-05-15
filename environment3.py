@@ -1,10 +1,11 @@
 '''                                                                           |
 Morgan Bryant, April 2017                                                     |
 Environment class for creating and handling world states.                     |
-environment3.py: this version intends to implement rotational capability.
+environment3.py: this version intends to implement ego/allocentric capability.
 '''
 import numpy as np
 import sys, os, random
+from scipy.sparse import coo_matrix
  
 agentLayer = 0;
 goalLayer = 1;
@@ -46,16 +47,29 @@ class state(object):
 
     def __init__(self, gridsize):
         self.gridsz = gridsize
+        self.sparse = False # coo_matrix format?
         self.grid = np.zeros((self.gridsz[XDIM], self.gridsz[YDIM], \
                 NUM_LAYERS), dtype='float32')
  
+    ''' For storage, sparsification supported.  For operations, desparsify.'''
+    def sparsify(self):
+        if self.sparse: return
+        self.grid = [coo_matrix(self.grid[:,:,i]) for i in range(NUM_LAYERS)]
+        self.sparse=True
+    def desparse(self):
+        if not self.sparse: return
+        self.grid = np.array([self.grid[i].toarray() for i in range(NUM_LAYERS)]) 
+        self.sparse=False
+
     def _post(self, loc, whichLayer): # set grid to on
         assert(len(loc)==2)
         #print "Adding", layer_names[whichLayer], "to loc", loc 
+        self.desparse()
         self.grid[loc[XDIM], loc[YDIM], whichLayer] = 1 
     def _del(self, loc, whichLayer):
         assert(len(loc)==2)
         #print "Deleting", layer_names[whichLayer], "from loc", loc
+        self.desparse()
         self.grid[loc[XDIM], loc[YDIM], whichLayer] = 0 
 
     ''' Public methods for the AGENT '''
@@ -78,8 +92,10 @@ class state(object):
 
     ''' Public methods for the IMMOBILE BLOCKS '''
     def isImBlocked(self, loc): 
+        self.desparse()
         return self.grid[loc[XDIM], loc[YDIM], immobileLayer]
     def post_immobile_blocks(self, opts):
+        self.desparse()
         if opts=='border':
             [self._post((x,y), immobileLayer) for x in range(self.gridsz[XDIM])\
                     for y in [0, self.gridsz[YDIM]-1] ]
@@ -92,8 +108,10 @@ class state(object):
 
     ''' Public methods for the MOBILE BLOCKS '''
     def isMoBlocked(self, loc): 
+        self.desparse()
         return self.grid[loc[XDIM], loc[YDIM], mobileLayer]
     def post_mobile_blocks(self, locs_list):
+        self.desparse()
         if type(locs_list)==list:
             for loc in locs_list: 
                 self._post(loc, mobileLayer)
@@ -105,6 +123,7 @@ class state(object):
 
     ''' Method: find out what kind of object is located at a queried location '''
     def getQueryLoc(self, loc, exception=False):
+        self.desparse()
         if self.grid[loc[XDIM], loc[YDIM],immobileLayer]==1:return immobileLayer
         if self.grid[loc[XDIM], loc[YDIM], mobileLayer]==1:   return mobileLayer
         if self.grid[loc[XDIM], loc[YDIM], agentLayer]==1:    return agentLayer
@@ -114,6 +133,7 @@ class state(object):
         return -1 # <- flag for 'empty square'
 
     def getAllLocs(self, m_or_i):
+        self.desparse()
         if m_or_i=='m':
           return [list(x) for x in np.argwhere(self.grid[:,:,mobileLayer]>0)]
         if m_or_i=='i':
@@ -121,6 +141,7 @@ class state(object):
             
     ''' Dump the entire grid representation, for debugging '''
     def dump_state(self):
+        self.desparse()
         for i in range(NUM_LAYERS):
             print "Layer #"+str(i)+", the "+layer_names[i]+":"
             print self.grid[:,:,i], '\n'
@@ -131,16 +152,19 @@ class state(object):
         s_p.grid = np.copy(self.grid)
         s_p.a_loc = self.a_loc
         s_p.g_loc = self.g_loc
+        s_p.sparse = self.sparse
         return s_p
 
     ''' Use this function for testing equality between states. '''
     def equals(self, s_p):
-        return np.array_equal(self.grid, s_p.grid) and self.gridsz==s_p.gridsz \
-                and s_p.a_loc == self.a_loc and s_p.g_loc == self.g_loc
+        return s_p.sparse == self.sparse and self.gridsz==s_p.gridsz \
+                and s_p.a_loc == self.a_loc and s_p.g_loc == self.g_loc \
+                and np.array_equal(self.grid, s_p.grid) 
 
     ''' Rotates a state by 90*rot degrees.  Only supported currently for 
         square grids.'''
     def rotate(self, rot): 
+        raise Exception("Deprecated...?")
         aloc = self.a_loc;
         gloc = self.g_loc;
         if rot==0: 
@@ -158,6 +182,7 @@ class state(object):
 
     ''' Get a boolean of whether or not I am a valid, consistent state. '''
     def checkValidity(self, long_version):
+        self.desparse()
         if self.isImBlocked(self.a_loc)==1.0: return False
         if long_version: # <- check extra properties for new init. Bloated!!
             if self.isImBlocked(self.a_loc)==1.0: 
@@ -187,10 +212,18 @@ class state(object):
         return True
 
     def dump_grid(self):
-        for y in range(self.gridsz[1]):
+        if not self.sparse:
+            for y in range(self.gridsz[1]):
+                for i in range(NUM_LAYERS):
+                    print self.grid[:,y,i], '\t',
+                print ''
+        else:
+            print '{',
             for i in range(NUM_LAYERS):
-                print self.grid[:,y,i], '\t',
-            print ''
+                if len(self.grid[i].data)==0: continue
+                print str(i)+':', self.grid[i].row, self.grid[i].col,
+                print self.grid[i].data,',',
+            print '}'
 
 
 class environment_handler3(object):
@@ -278,42 +311,19 @@ class environment_handler3(object):
         Specifically: return an 3-tuple of: 
             1. Move agent in which cardinal direction, regardless of world move 
             2. Move world in which cardinal direction, regardless of agent move
-            3. Rotate agent in world in ID*90 degrees, regardless of world rot
-            4. Rotate world in ID*90 degrees, regardless of agent rot'''
+    '''
+
     def _get_action_from_actionID(self, ID):
         if self.action_mode == 'allocentric':
-            return (cardinals[ID], NO_MOVE,       ROT0, ROT0)
+            return (cardinals[ID], NO_MOVE)
         if self.action_mode == 'egocentric':
-            return (cardinals[ID], inv_cards[ID], ROT0, ROT0)
-        '''
-        if self.action_mode == 'rotSPIN_allocentric':
-            if ID == ACTION0: return (self.Fwd(), NO_MOVE, ROT0, ROT0)
-            if ID == ACTION1: return (NO_MOVE, NO_MOVE, rots[ID], ROT0)
-            if ID == ACTION2: return (NO_MOVE, NO_MOVE, rots[ID], ROT0)
-            if ID == ACTION3: return (NO_MOVE, NO_MOVE, rots[ID], ROT0)
-        if self.action_mode == 'rotSPIN_egocentric':
-            if ID == ACTION0: return (self.Fwd(), self.Bck(), ROT0,     ROT0)
-            if ID == ACTION1: return (NO_MOVE,    NO_MOVE,    rots[ID], invrots[ID])
-            if ID == ACTION2: return (NO_MOVE,    NO_MOVE,    ROT0,     rots[ID])
-            if ID == ACTION3: return (NO_MOVE,    NO_MOVE,    rots[ID], invrots[ID])
-        if self.action_mode == 'rotFwdBck_allocentric':
-            if ID == ACTION0: return (self.Fwd(), NO_MOVE, ROT0,     ROT0)
-            if ID == ACTION1: return (NO_MOVE,    NO_MOVE, rots[ID], ROT0)
-            if ID == ACTION2: return (self.Bck(), NO_MOVE, ROT0,     ROT0)
-            if ID == ACTION3: return (NO_MOVE,    NO_MOVE, rots[ID], ROT0)
-        if self.action_mode == 'rotFwdBck_egocentric':
-            if ID == ACTION0: return (self.Fwd(), self.Bck(), ROT0,     ROT0)
-            if ID == ACTION1: return (NO_MOVE,    NO_MOVE,    rots[ID], invrots[ID])
-            if ID == ACTION2: return (self.Fwd(), self.Bck(), ROT0,     ROT0)
-            if ID == ACTION3: return (NO_MOVE,    NO_MOVE,    rots[ID], invrots[ID])
-        '''
+            return (cardinals[ID], inv_cards[ID])
 
     ''' User-facing method: given 1/4 actions, return the updated state '''
     def performActionInMode(self, State, actionID, mode=None):
         try: action_mode = (self.action_mode if mode==None else mode)
         except:  raise Exception("No action mode specified.")
         action_tuple = self._get_action_from_actionID(actionID)
-        print '\t',action_tuple
         return self._performGenericAction(State, action_tuple)
 
     ''' Given a tuple of (a_mv, w_mv, a_rot, w_rot), perform that update. '''
@@ -323,10 +333,8 @@ class environment_handler3(object):
         if not valid: return State # same state as before: current state.
 
         tmp_1 = self._shiftAgent(State.copy(), action_tuple[0])
-        #tmp_2 = self.performAction(tmp_1, None, action_tuple[2], False) 
-        tmp_3 = self._shiftMap(tmp_1, action_tuple[1])
-        #tmp_4 = self._rotMap(tmp_3, action_tuple[3])
-        return tmp_3
+        tmp_2 = self._shiftMap(tmp_1, action_tuple[1])
+        return tmp_2
 
 
     ''' Given a world and direction, move only the Agent.'''
@@ -381,7 +389,9 @@ class environment_handler3(object):
     def isGoalReached(self, State):
         if State==None:
             return False;
-        return np.array_equal(State.get_agent_loc(), State.get_goal_loc())
+        return State.sparse and State.grid[0]==State.grid[1] \
+                or np.array_equal(State.grid[:,:,0], State.grid[:,:,1]) \
+                or np.array_equal(State.get_agent_loc(), State.get_goal_loc())
 
     # TODO: update this V
     def getActionValidities(self, s): return np.array(\
@@ -397,32 +407,33 @@ class environment_handler3(object):
             for x in range(self.gridsz[XDIM]):
                 flag = State.getQueryLoc((x,y), exception)
                 if flag==agentLayer: l += '@'
-                if flag==goalLayer: l += 'X'
-                if flag==immobileLayer: l += '#'
-                if flag==mobileLayer: l += 'O'
-                if flag==-1: l += '-'
+                elif flag==goalLayer: l += 'X'
+                elif flag==immobileLayer: l += '#'
+                elif flag==mobileLayer: l += 'O'
+                elif flag==-1: l += '-'
             print ' '.join(l)
 
     def displayTransition(self, S1, S2):
         for y in range(self.gridsz[YDIM]):
             l1 = []; l2=[]
             for x in range(self.gridsz[XDIM]):
-                flag = S1.getQueryLoc((x,y))
+                flag = S1.getQueryLoc((x,y), True)
                 if flag==agentLayer: l1 += '@'
                 if flag==goalLayer: l1 += 'X'
                 if flag==immobileLayer: l1 += '#'
                 if flag==mobileLayer: l1 += 'O'
-                if flag==-1: l1 += ' '
-                flag = S2.getQueryLoc((x,y))
+                if flag==-1: l1 += '-'
+                flag = S2.getQueryLoc((x,y), True)
                 if flag==agentLayer: l2 += '@'
                 if flag==goalLayer: l2 += 'X'
                 if flag==immobileLayer: l2 += '#'
                 if flag==mobileLayer: l2 += 'O'
-                if flag==-1: l2 += ' '
+                if flag==-1: l2 += '-'
             if not y==self.gridsz[YDIM]//2:
                 print ' '.join(l1), '    ', ' '.join(l2)
             else:
                 print ' '.join(l1), ' -> ', ' '.join(l2)
+        print ''
 
     def printOneLine(self, State, mode='print', ret_Is=False):
         ''' Prints the state as succintly as possible '''
