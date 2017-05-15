@@ -1,0 +1,60 @@
+Info: implemented is a basic plot system that diplays a trial's successes, 
+smoothed by 25-average on 2000 epochs.
+
+Two seeded iterations tested, identified as 0 and 1: seed generator confirms ===.
+
+Results:        - negative example      . neutral example       + positive ex. 
+
+MNA   LR    Epsilon    iter     result 
+1   0.001   0.1        0-17  -- allo -> 1; ego -> 0.75                  0.875
+1   0.001   1/x        0-33  -  allo -> 0.5, ego 0.25                   0.375
+1   0.001   1/nx10     0-41  -  allo ^^ 0.9, ego -> 0.75                0.85
+1   0.001   1/nx50     0-49  -  allo -> 0.75, ego 0.25                  0.5
+1   0.001   lin decay  0-25  -  allo -> 0.6, ego 0.25                   0.4
+2   0.001   0.5        0-03  -  allo ^^ 0.8, ego 0.25                   0.6ish
+2   0.001   1/x        0-35  -- allo ^^ 0.9, ego peaks 0.7 -> 0.5       0.75
+2   0.001   lin decay  0-27  -  allo -> 0.75, ego 0.25                  0.5
+2   0.0002  1/nx10     0-47  -  ego => 0.5 fast, allo ^^ 0.6            0.6
+
+1   0.0002  0.9        0-13  .  both ~~ 0.5                             0.5
+1   0.0002  0.1        0-21  .  both -> 0.5, ego slightly faster        0.5
+1   0.0002  1/x        0-37  .+ both -> 0.5, ego much faster            0.55
+1   0.0002  1/nx50     0-53  .  both ^^ 0.6                             0.65
+2   0.001   0.9        0-11  .  both 0.25                               0.25
+2   0.001   1/nx50     0-51  .  both 0.25                               0.25
+2   0.0002  0.1        0-23  .  both -> 0.5, ego slightly faster        0.5
+2   0.0002  0.5        0-07  .  both -> 0.5                             0.5
+2   0.0002  0.9        0-15  .  both -> 0.5                             0.5
+2   0.0002  1/x        0-39  .  both -> 0.5                             0.5
+2   0.0002  1/nx50     0-55  .  both ~~ 0.5                             0.5
+2   0.0002  lin decay  0-31  .  both -> 0.5, ego slightly faster        0.5
+
+1   0.001   0.5        0-01  +  ego ^^ 0.75 & allo ^^ 0.65              0.7
+1   0.001   0.9        0-09  +  ego ^^ 0.7 & allo 0.25                  0.55
+1   0.0002  0.5        0-45  +  ego ^^ 0.7 & allo ^^ 0.5                0.65
+1   0.0002  1/nx10     0-29  +  ego ~> 0.45, allo ~> 0.35               0.4
+1   0.0002  lin decay  0-29  +  both -> 0.5, ego faster (by ~300 epochs) 0.5
+2   0.001   0.1        0-19  ++ ego much better (->1) & allo 0.25       0.7
+2   0.001   1/nx10     0-43  +  ego better (->75) and fast; allo 0.25   0.5
+
+->> biases: 
+Epsilon: 0.1 none (extreme values - high variance!), 0.5 slightly +, 
+    0.9 slightly +, 1/x -, 1/nx10 none but high variance, 1/nx50 none low var 
+    lin decay none with variance
+MNA: 1 score: 7 -, 3.5 none, 5.5 +.  2 score: 4 -, 8 none, 3 +.
+LR: 0.001 score: 10 -, 2 none, 5 +.  0.0002 score: 1 -, 9.5 none, 3.5 +.
+
+    -> ie, LR & MNA similar means but MNA1 and LR=1e-3 vary much more
+
+->> success / accuracy:
+Epsilon: 
+    0.1: extreme, inconsistent, bias towards ego.
+    0.5: performs somewhat well relatively          0.9: weak       
+    1/x: weak       1/nx10: slightly well           1/nx50: slightly weak
+    lin decay: reliably mediocre
+MNA: 1: [0.875,0.375,0.85, 0.5,0.4,0.5,0.5,0.55,0.65,0.7,0.55,0.65,0.4,0.5]
+     2: [0.6, 0.75, 0.5, 0.6, 0.25, 0.25, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.7, 0.5]
+    MNA=1 does better by about 6.0% (0.571 vs 0.511).
+LR: 1: [0.875, 0.375, 0.85, 0.5, 0.4, 0.6,0.75,0.5,0.25,0.25,0.7,0.55,0.7,0.5]
+    2: [0.6,0.5,0.5,0.55,0.65,0.5,0.5,0.5,0.5,0.5,0.5,0.65,0.4,0.5]
+    Learning rate number 0.001 does better than 0.0002 by 3.2% (0.557 vs 0.525)
