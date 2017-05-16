@@ -54,8 +54,10 @@ class experiment(object):
             self.version='v0-a_fixedloc'
             self.nsamples = 1
             self.no_save = True
-            self.dest = './storage/5-15/MNA3/'
+            self.dest = './storage/5-15/dev/'
+            self.logfile = open (self.dest+'logfile.txt', 'w')
             self.run_exp('allo-ego')
+        self.logfile.close()
         call(["open", self.dest])
     def getseed(self): 
         self.seed += 1
@@ -72,16 +74,16 @@ class experiment(object):
         '''------------------'''
         ''' Options to edit: '''
         '''------------------'''
-        _training_epochs = [2000]
+        _training_epochs = [100]
         mnas = [3]
-        lrs = [1e-3,2e-4]
-        epsilons = [0.5, 0.9, 0.1, 'lindecay', '1/x', '1/nx10', '1/nx50']
+        lrs = [1e-3]
+        epsilons = [0.5, '1/nx5']
         #optimizers = [ ['sgd']]+ [['adam',i] for i in [1e-3,1e-4,1e-5,1e-6]] 
         optimizers = [ ['adam', 1e-6] ] 
-        network_sizes = [('cv','cv','fc',16,16,36),]
+        network_sizes = [('cv','cv','fc',16,16,36),('cv','cv','fc',32,32,72)]
         data_modes = ['shuffled']#, 'ordered']
         gamesizes = [(5,5)]
-        smoothing = 25 # <- Adjust for plotting: higher=smoother
+        smoothing = 5 # <- Adjust for plotting: higher=smoother
         '''--------------------------'''
         ''' end of recommended edits '''
         '''--------------------------'''
@@ -90,24 +92,26 @@ class experiment(object):
                 len(epsilons)*len(optimizers)*len(network_sizes)*len(data_modes)
         saved_time_str = get_time_str(self.dest)
         self.MNA = []
-        [[[[[[[[ self.run_trial( epch, mna, lr, nsize, eps_expl, opmzr, gsz, \
+        for mna in mnas:
+          self.seed = 0
+          [[[[[[[ self.run_trial( epch, mna, lr, nsize, eps_expl, opmzr, gsz, \
                 centric, nsamples, dm, smoothing)\
                 for epch in _training_epochs ]\
-                for mna in mnas ]\
+                #for mna in mnas ]\
                 for lr in lrs ]\
                 for nsize in network_sizes ]\
                 for eps_expl in epsilons ]\
                 for opmzr in optimizers ]\
                 for gsz in gamesizes]\
                 for dm in data_modes]
-        if self.no_save: return
-        [[[[[[[[ save_as_plot1(self.get_filesave_str(mna, lr, gsz, eps_expl,\
+          if self.no_save: continue#return
+          [[[[[[[ save_as_plot1(self.get_filesave_str(mna, lr, gsz, eps_expl,\
                     opmzr, epch, nsize, data_mode, centric) +\
                     '-loss-graph.npy', \
                     str(lr), str(mna), str(nsamples), which='L S', \
                     div=N_EPS_PER_EPOCH)
                 for epch in _training_epochs ]\
-                for mna in mnas ]\
+                #for mna in mnas ]\
                 for lr in lrs ]\
                 for nsize in network_sizes ]\
                 for eps_expl in epsilons ]\
@@ -137,6 +141,7 @@ class experiment(object):
                 '-lr' + '%1.e' % lr + \
                 '-nepochs'+str(nepochs) +\
                 '-' + str(gsz).replace(', ', 'x') + \
+                '-nsamps_' + str(self.nsamples) + \
                 '-eps_' + str(eps) + \
                 '-opt_'+str(opmzr) + \
                 '-net'+'_'.join([str(i) for i in nsize]) + \
@@ -146,22 +151,27 @@ class experiment(object):
 
      
     def run_single_train_sess(self, nsamples, mna, lr, training_epochs, \
-            nsize, eps_expl, opmzr, gsz, data_mode, centric, curseed):
+            nsize, eps_expl, opmzr, gsz, data_mode, centric, curseed, s=''):
         Tr_Successes = []; 
         Te_Successes = []; 
         states = None
         for ri in range(nsamples):
+            print "seed:", curseed
             ovr = {'max_num_actions': mna, 'learning_rate':lr, \
                     'nepochs': training_epochs, 'netsize':nsize, \
                     'epsilon':eps_expl, \
                     'optimizer_tup':opmzr, 'rotation':False };
             r = reinforcement(self.version, centric, override=ovr, \
-                    game_shape=gsz, data_mode=data_mode, seed=curseed)
+                    game_shape=gsz, data_mode=data_mode, seed=curseeds[ri])
 
             results = r.run_session(params={\
                 'buffer_updates':False, 'rotational':False, 'printing':False}) 
             Tr_Successes.append(results.get('train', 'successes'))
-            Te_Successes.append(results.get('test', 'successes'))
+            test_results = results.get('test', 'successes')
+            Te_Successes.append(test_results)
+            if training_epochs > 30 and len(s)>0:
+                self.logfile.write(s+' sample #'+str(ri)+\
+                        ' last 30 test accs: '+str(test_results[-30:]))
             if states==None: 
                 states = results.get('states')
         return  np.mean(np.array(Tr_Successes), axis=0), \
@@ -174,7 +184,7 @@ class experiment(object):
         print("\t max number of actions: "+str(mna))
         print("\t learning rate: "+str(lr))
         print("\t num training epochs: "+str(training_epochs))
-        print("\t samples: "+str(nsamples))
+        print("\t samples: "+str(self.nsamples))
         print("\t frame: "+centric)
         print("\t data mode: "+str(data_mode))
         print("\t exploration epsilon: "+str(eps_expl))
@@ -182,26 +192,25 @@ class experiment(object):
         print("\t game input shape: "+str(gsz))
         print("\t optimizer: "+str(opmzr))
         self.trial_counter+=1
-        curseed = self.getseed()
+        curseeds = [self.getseed() for ns in range(nsamples)]
         #training_eps_ = training_eps * (1 if lr>0.001 else 2)
         s=self.get_filesave_str(mna, lr, gsz, eps_expl, opmzr, \
-                training_epochs, nsize, data_mode, centric, curseed)
+                training_epochs, nsize, data_mode, centric, 0)
 
         if centric in ['allocentric', 'egocentric']:
             tr_successes, te_successes, states = self.run_single_train_sess(\
-                    nsamples, mna, lr, training_epochs, nsize, eps_expl, \
-                    opmzr, gsz, data_mode, centric, curseed)
+                    self.nsamples, mna, lr, training_epochs, nsize, eps_expl, \
+                    opmzr, gsz, data_mode, centric, curseeds, s)
             save_as_successes(s+'-successes', tr_successes, te_successes, \
                 states, smooth_factor, centric)
             return;
         elif centric=='allo-ego':
             tr_successes_e, te_successes_e, st_e = self.run_single_train_sess(\
-                    nsamples, mna, lr, training_epochs, nsize, eps_expl, \
-                    opmzr, gsz, data_mode, 'egocentric', curseed)
-            curseed = self.getseed()
+                    self.nsamples, mna, lr, training_epochs, nsize, eps_expl, \
+                    opmzr, gsz, data_mode, 'egocentric', curseeds, s)
             tr_successes_a, te_successes_a, st_a = self.run_single_train_sess(\
-                    nsamples, mna, lr, training_epochs, nsize, eps_expl, \
-                    opmzr, gsz, data_mode, 'allocentric', curseed)
+                    self.nsamples, mna, lr, training_epochs, nsize, eps_expl, \
+                    opmzr, gsz, data_mode, 'allocentric', curseeds, s)
             assert(st_e==st_a)
             save_as_successes(s+'-successes', tr_successes_e, te_successes_e, \
                 st_e, smooth_factor, ['ego','allo'],

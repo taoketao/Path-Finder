@@ -40,6 +40,8 @@ C1_NFILTERS = 32;       # number of filters in conv layer #1
 C1_SZ = (3,3);          # size of conv #2's  window
 C2_NFILTERS = 32;       # number of filters in conv layer #2
 C2_SZ = (3,3);          # size of conv #2's  window
+FC_1_SIZE = 32;        
+FC_2_SIZE = 32;       
 FC_3_SIZE = 72;        # number of outputs in dense layer #1
 N_ROTATIONS = 4; # FC layer 2 out size: # actions or # actions + # rotations.
 
@@ -101,11 +103,13 @@ class network(object):
 
         if 'cv1_size' in self.layer_types and 'cv2_size' in self.layer_types \
                 and 'fc3_size' in self.layer_types:
-            self._construct_2conv_2fc_network(load_weights_path, _train, \
-                    _optimizer_type)
+            self.structure = 'cv-cv-fc-fc'
+        elif 'fc1_size' in self.layer_types and 'fc2_size' in self.layer_types \
+                and 'fc3_size' in self.layer_types:
+            self.structure = 'fc-fc-fc-fc'
+        else: raise Exception("Invalid network build requested.")
 
-    def _construct_2conv_2fc_network(self, load_weights_path, _train, \
-            _optimizer_type):
+
         self.nconvs_1 = (self.gridsz[XDIM]-2, self.gridsz[YDIM]-2)
         self.nconvs_2 = (self.gridsz[XDIM]-4, self.gridsz[YDIM]-4)
 
@@ -115,12 +119,21 @@ class network(object):
         self._init_layer_structure()
 
         self.conv_filter_1_shape = (C1_SZ[0], C1_SZ[1], N_LAYERS, self.cv1_size)
-        self.conv_filter_2_shape = (C2_SZ[0], C2_SZ[1], self.cv1_size, self.cv2_size)
+        self.conv_filter_2_shape = (C2_SZ[0], C2_SZ[1], self.cv1_size, \
+                self.cv2_size)
         conv_strides_1 = (1,1,1,1)
         conv_strides_2 = (1,1,1,1)
-        self.fc_weights_3_shape =\
+
+        self.fc_weights_1_shape =(N_LAYERS, self.fc3_size)
+        self.fc_weights_2_shape = (self.fc3_size, self.fc3_size)
+
+        if self.structure=='cv-cv-fc-fc':
+            self.fc_weights_3_shape =\
                 (self.cv2_size*np.prod(self.nconvs_2), self.fc3_size)
+        elif self.structure=='fc-fc-fc-fc':
+            self.fc_weights_3_shape = (self.fc2_size, self.fc3_size)
         self.out_weights_4_shape = (self.fc3_size, self.out_size)
+
 
         #   helper factors
         try: np_var_factor = N_LAYERS * self.gridsz[XDIM] * self.gridsz[YDIM]
@@ -141,61 +154,41 @@ class network(object):
         inits = self._initialize_weights(load_weights_path)
 
         ''' trainable Tensorflow Variables '''
-        self.conv_filter_1 = tf.Variable(inits['cv1'], \
-                name='cv1', trainable=_train, dtype=tf.float32)
-        self.conv_bias_1 = tf.Variable(inits['cv1_b'], \
-                name='cv1_b', trainable=_train, dtype=tf.float32)
-        self.conv_filter_2 = tf.Variable(inits['cv2'], \
-                name='cv2', trainable=_train, dtype=tf.float32)
-        self.conv_bias_2 = tf.Variable(inits['cv2_b'], \
-                name='cv2_b', trainable=_train, dtype=tf.float32)
-        self.fc_weights_1 = tf.Variable(inits['fc3'], \
+        if self.structure=='cv-cv-fc-fc':
+            self.conv_filter_1 = tf.Variable(inits['cv1'], \
+                    name='cv1', trainable=_train, dtype=tf.float32)
+            self.conv_bias_1 = tf.Variable(inits['cv1_b'], \
+                    name='cv1_b', trainable=_train, dtype=tf.float32)
+            self.conv_filter_2 = tf.Variable(inits['cv2'], \
+                    name='cv2', trainable=_train, dtype=tf.float32)
+            self.conv_bias_2 = tf.Variable(inits['cv2_b'], \
+                    name='cv2_b', trainable=_train, dtype=tf.float32)
+        elif self.structure=='fc-fc-fc-fc':
+            self.fc_weights_1 = tf.Variable(inits['fc1'], \
+                    name='fc1', trainable=_train)
+            self.fc_bias_1 = tf.Variable(inits['fc1_b'], \
+                    name='fc1_b', trainable=_train)
+            self.fc_weights_2 = tf.Variable(inits['fc2'], \
+                    name='fc2', trainable=_train)
+            self.fc_bias_2 = tf.Variable(inits['fc2_b'], \
+                    name='fc2_b', trainable=_train)
+
+        self.fc_weights_3 = tf.Variable(inits['fc3'], \
                 name='fc3', trainable=_train)
-        self.fc_bias_1 = tf.Variable(inits['fc3_b'], \
+        self.fc_bias_3 = tf.Variable(inits['fc3_b'], \
                 name='fc3_b', trainable=_train)
-        self.fc_weights_2 = tf.Variable(inits['out4'], \
+        self.fc_weights_4 = tf.Variable(inits['out4'], \
                 name='out4', trainable=_train)
-        self.fc_bias_2 = tf.Variable(inits['out4_b'], \
+        self.fc_bias_4 = tf.Variable(inits['out4_b'], \
                 name='out4_b', trainable=_train)
 
-        ''' Layer Construction (ie forward pass construction) '''
-        self.input_layer = tf.placeholder(tf.float32, [None,                  \
-                self.gridsz[XDIM], self.gridsz[YDIM], N_LAYERS], 'input');    \
-        self.l1 = tf.nn.conv2d(\
-                input = self.input_layer, \
-                filter = self.conv_filter_1,\
-                strides = conv_strides_1, \
-                padding = 'VALID', \
-                name = "conv1")
-        if self.net_params['dropout'] in ['all']:
-            l1_dropped = tf.nn.dropout(self.l1, 0.5)
-            self.l1_act = tf.nn.relu( l1_dropped + self.conv_bias_1 )
-        else:
-            self.l1_act = tf.nn.relu( self.l1 + self.conv_bias_1 )
-        self.l2 = tf.nn.conv2d(\
-                input = self.l1, \
-                filter = self.conv_filter_2,\
-                strides = conv_strides_2, \
-                padding = 'VALID', \
-                name = "conv2")
-        if self.net_params['dropout'] in ['all']:
-            l2_dropped = tf.nn.dropout(self.l2, 0.5)
-            self.l2_act = tf.nn.relu( l2_dropped + self.conv_bias_1 )
-        else:
-            self.l2_act = tf.nn.relu( self.l2 + self.conv_bias_2 )
-        self.l2_flat = tf.contrib.layers.flatten(self.l2_act)
-        self.l3 = tf.matmul(self.l2_flat, self.fc_weights_1, name='fc3')
-        if self.net_params['dropout'] in ['all', 'last']:
-            l3_dropped = tf.nn.dropout(self.l3, 0.5)
-            self.l3_act = tf.nn.relu( l3_dropped + self.fc_bias_1 )
-        else:
-            self.l3_act = tf.nn.relu( self.l3 + self.fc_bias_1 )
-        self.l4 = tf.matmul(self.l3_act, self.fc_weights_2, name='out4')
-        self.output_layer = tf.nn.tanh(self.l4+self.fc_bias_2, name='output')
-
-        self.trainable_vars = [self.conv_filter_1, self.conv_filter_2, \
-                self.fc_weights_1, self.fc_weights_2, self.conv_bias_1, \
-                self.conv_bias_2, self.fc_bias_1, self.fc_bias_2]
+        ''' Construct network: options. '''
+        if self.structure=='cv-cv-fc-fc':
+            self._construct_2conv_2fc_network(load_weights_path, _train, \
+                    _optimizer_type)
+        elif self.structure=='fc-fc-fc-fc':
+            self._construct_4fc_network(load_weights_path, _train, \
+                    _optimizer_type)
 
         ''' Network operations (besides forward passing) '''
         self.pred_var = self.output_layer
@@ -214,24 +207,98 @@ class network(object):
  
         self.sess = None
 
+    def _construct_2conv_2fc_network(self, load_weights_path, _train, \
+                    _optimizer_type):
+        drp = self.net_params['dropout'] in ['all']
+        ''' Layer Construction (ie forward pass construction) '''
+        self.input_layer = tf.placeholder(tf.float32, [None,                  \
+                self.gridsz[XDIM], self.gridsz[YDIM], N_LAYERS], 'input');    \
+
+        self.l1 = tf.nn.conv2d(\
+                input = self.input_layer, \
+                filter = self.conv_filter_1,\
+                strides = conv_strides_1, \
+                padding = 'VALID', \
+                name = "conv1") + self.conv_bias_1
+        if drp=='all': self.l1 = tf.nn.dropout(self.l1, 0.5)
+        self.l1_act = tf.nn.relu( self.l1 )
+
+        self.l2 = tf.nn.conv2d(\
+                input = self.l1_act, \
+                filter = self.conv_filter_2,\
+                strides = conv_strides_2, \
+                padding = 'VALID', \
+                name = "conv2") + self.conv_bias_2 
+        if drp=='all': self.l2 = tf.nn.dropout(self.l2, 0.5)
+        self.l2_act = tf.nn.relu( self.l2 )
+
+        self.l2_flat = tf.contrib.layers.flatten(self.l2_act)
+        self.l3 = tf.matmul(self.l2_flat, self.fc_weights_3, name='fc3')\
+                            + self.fc_bias_3
+        if drp in ['all', 'last']: self.l3 = tf.nn.dropout(self.l3, 0.5)
+
+        self.l3_act = tf.nn.relu( self.l3  )
+        self.l4 = tf.matmul(self.l3_act, self.fc_weights_4, name='out4')
+        self.output_layer = tf.nn.tanh(self.l4+self.fc_bias_4, name='output')
+
+        self.trainable_vars = [self.conv_filter_1, self.conv_filter_2, \
+                self.fc_weights_3, self.fc_weights_4, self.conv_bias_1, \
+                self.conv_bias_2, self.fc_bias_3, self.fc_bias_4]
+
+
+    def _construct_4fc_network(self, load_weights_path, _train, _optimizer_type):
+        drp = self.net_params['dropout'] in ['all']
+        ''' Layer Construction (ie forward pass construction) '''
+        self.input_layer = tf.placeholder(tf.float32, [None,                  \
+                self.gridsz[XDIM], self.gridsz[YDIM], N_LAYERS], 'input');    \
+
+        self.l1 = tf.matmul(self.input_layer, self.fc_weights_1, name='fc1')\
+                            + self.fc_bias_1
+        if drp in ['all']:  self.l1 = tf.nn.dropout(self.l1, 0.5)
+        self.l1_act = tf.nn.relu( self.l1 )
+
+        self.l2 = tf.matmul(self.l1_act, self.fc_weights_2, name='fc2')\
+                            + self.fc_bias_2
+        if drp in ['all']:  self.l2 = tf.nn.dropout(self.l2, 0.5)
+        self.l2_act = tf.nn.relu( self.l2 )
+
+        self.l3 = tf.matmul(self.l2_act, self.fc_weights_3, name='fc3')\
+                            + self.fc_bias_3
+        if drp in ['all', 'last']: self.l3 = tf.nn.dropout(self.l3, 0.5)
+        self.l3_act = tf.nn.relu( self.l3 )
+
+        self.l4 = tf.matmul(self.l3_act, self.fc_weights_4, name='out4')
+        self.output_layer = tf.nn.tanh(self.l4+self.fc_bias_4, name='output')
+
+        self.trainable_vars = [self.fc_weights_1, self.fc_weights_2, \
+                self.fc_weights_3, self.fc_weights_4, self.fc_bias_1, \
+                self.fc_bias_2, self.fc_bias_3, self.fc_bias_4]
 
 
     def _init_layer_structure(self):
         if self.net_params==None:
             self.cv1_size = C1_NFILTERS
             self.cv2_size = C2_NFILTERS
-            self.fc3_size = FC_4_SIZE
+            self.fc1_size = FC_1_SIZE
+            self.fc2_size = FC_2_SIZE
+            self.fc3_size = FC_3_SIZE
             self.out_size = N_ACTIONS
             return
         if 'cv1_size' in self.net_params:
-                self.cv1_size = self.net_params['cv1_size']
-        else:   self.cv1_size = C1_NFILTERS
+            self.cv1_size = self.net_params['cv1_size']
+        else: self.cv1_size = C1_NFILTERS
+        if 'fc1_size' in self.net_params:
+            self.fc1_size = self.net_params['fc2_size']
+        else:  self.fc1_size = FC_1_SIZE
         if 'cv2_size' in self.net_params:
-                self.cv2_size = self.net_params['cv2_size']
-        else:   self.cv2_size = C2_NFILTERS
+            self.cv2_size = self.net_params['cv2_size']
+        else:  self.cv2_size = C2_NFILTERS
+        if 'fc2_size' in self.net_params:
+            self.fc2_size = self.net_params['fc2_size']
+        else:  self.fc2_size = FC_2_SIZE
         if 'fc3_size' in self.net_params:
-                self.fc3_size = self.net_params['fc3_size']
-        else:   self.fc3_size = FC_3_SIZE
+            self.fc3_size = self.net_params['fc3_size']
+        else: self.fc3_size = FC_3_SIZE
 
         if not 'action_mode' in self.net_params:
             self.out_size = N_ACTIONS
@@ -255,15 +322,16 @@ class network(object):
             loaded = np.load(initialization)
             for var in loaded:
                 weights[var.split(':')[0]] = tf.constant(loaded[var])
-        else:
-            if mode=='1/n':
+            return weights
+        if mode=='1/n':
+            if self.structure=='cv-cv-fc-fc':
+                ''' First Layers:Conv inits '''
                 weights['cv1'] = tf.random_uniform(\
                     self.conv_filter_1_shape, dtype=tf.float32, seed=self.seed,\
                     minval = 0.0, maxval = 2.0/self.c1_var_factor * VAR_SCALE)
                 weights['cv1_b'] = tf.random_uniform(\
                     (self.cv1_size,), dtype=tf.float32, seed=self.seed,\
                     minval = 0.0, maxval = 2.0/self.c1_var_factor * VAR_SCALE)
-
                 weights['cv2'] = tf.random_uniform(\
                     self.conv_filter_2_shape, dtype=tf.float32, seed=self.seed, \
                     minval = 0.0, maxval = 2.0/self.c2_var_factor * VAR_SCALE)
@@ -271,21 +339,38 @@ class network(object):
                     (self.cv2_size,), dtype=tf.float32, seed=self.seed, \
                     minval = 0.0, maxval = 2.0/self.c2_var_factor * VAR_SCALE)
 
-                weights['fc3'] = tf.random_uniform(\
-                    self.fc_weights_3_shape, dtype=tf.float32, seed=self.seed,\
-                    minval=0.0, maxval=2.0/self.f3_var_factor * VAR_SCALE )
-                weights['fc3_b'] = tf.random_uniform(\
+            if self.structure=='fc-fc-fc-fc':
+                ''' First Layers:FC inits '''
+                weights['fc1'] = tf.random_uniform(\
+                    self.fc_weights_1_shape, dtype=tf.float32, seed=self.seed,\
+                    minval=0.0, maxval=2.0/self.f1_var_factor * VAR_SCALE )
+                weights['fc1_b'] = tf.random_uniform(\
                     (self.fc3_size,), dtype=tf.float32, seed=self.seed,\
-                    minval=0.0, maxval=2.0/self.f3_var_factor * VAR_SCALE )
+                    minval=0.0, maxval=2.0/self.f1_var_factor * VAR_SCALE )
+                weights['fc2'] = tf.random_uniform(\
+                    self.fc_weights_2_shape, dtype=tf.float32, seed=self.seed,\
+                    minval=0.0, maxval=2.0/self.f2_var_factor * VAR_SCALE )
+                weights['fc2_b'] = tf.random_uniform(\
+                    (self.fc3_size,), dtype=tf.float32, seed=self.seed,\
+                    minval=0.0, maxval=2.0/self.f2_var_factor * VAR_SCALE )
 
-                weights['out4']= tf.random_uniform(\
-                    self.out_weights_4_shape, dtype=tf.float32, seed=self.seed,\
-                    minval=-1.0/self.o4_var_factor * VAR_SCALE,\
-                    maxval= 1.0/self.o4_var_factor * VAR_SCALE )
-                weights['out4_b']= tf.random_uniform(\
-                    (self.out_size,), dtype=tf.float32, seed=self.seed,\
-                    minval=-1.0/self.o4_var_factor * VAR_SCALE,\
-                    maxval= 1.0/self.o4_var_factor * VAR_SCALE )
+            ''' Last Layers:FC,out inits '''
+            weights['fc3'] = tf.random_uniform(\
+                self.fc_weights_3_shape, dtype=tf.float32, seed=self.seed,\
+                minval=0.0, maxval=2.0/self.f3_var_factor * VAR_SCALE )
+            weights['fc3_b'] = tf.random_uniform(\
+                (self.fc3_size,), dtype=tf.float32, seed=self.seed,\
+                minval=0.0, maxval=2.0/self.f3_var_factor * VAR_SCALE )
+
+            weights['out4']= tf.random_uniform(\
+                self.out_weights_4_shape, dtype=tf.float32, seed=self.seed,\
+                minval=-1.0/self.o4_var_factor * VAR_SCALE,\
+                maxval= 1.0/self.o4_var_factor * VAR_SCALE )
+            weights['out4_b']= tf.random_uniform(\
+                (self.out_size,), dtype=tf.float32, seed=self.seed,\
+                minval=-1.0/self.o4_var_factor * VAR_SCALE,\
+                maxval= 1.0/self.o4_var_factor * VAR_SCALE )
+
         return weights
 
 
@@ -390,6 +475,7 @@ class NetworkCollector(object):
             raise Exception("NetworkCollector has not implemented that "+\
                     "argument type.  Please provide file(s) for network init.")
 
+        """    ...TODO...    """
 
 
 
