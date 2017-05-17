@@ -34,6 +34,7 @@ INVALID_REWARD = 0.0;
 GAMMA = 0.9;
 LEARNING_RATE = 0.01;
 VAR_SCALE = 1.0; # scaling for variance of initialized values
+DEFAULT_HUBER_SATURATION = 0.1 # 0.03? 
 
 ''' Architecture default parameters '''
 C1_NFILTERS = 32;       # number of filters in conv layer #1
@@ -121,11 +122,11 @@ class network(object):
         self.conv_filter_1_shape = (C1_SZ[0], C1_SZ[1], N_LAYERS, self.cv1_size)
         self.conv_filter_2_shape = (C2_SZ[0], C2_SZ[1], self.cv1_size, \
                 self.cv2_size)
-        conv_strides_1 = (1,1,1,1)
-        conv_strides_2 = (1,1,1,1)
+        self.conv_strides_1 = (1,1,1,1)
+        self.conv_strides_2 = (1,1,1,1)
 
-        self.fc_weights_1_shape =(N_LAYERS, self.fc3_size)
-        self.fc_weights_2_shape = (self.fc3_size, self.fc3_size)
+        self.fc_weights_1_shape = (self.flat_inp_sz, self.fc1_size)
+        self.fc_weights_2_shape = (self.fc1_size, self.fc2_size)
 
         if self.structure=='cv-cv-fc-fc':
             self.fc_weights_3_shape =\
@@ -141,6 +142,10 @@ class network(object):
         try: self.c1_var_factor = np.prod(self.conv_filter_1_shape)
         except: pass
         try: self.c2_var_factor = np.prod(self.conv_filter_2_shape)
+        except: pass
+        try: self.f1_var_factor = np.prod(self.fc_weights_1_shape)
+        except: pass
+        try: self.f2_var_factor = np.prod(self.fc_weights_2_shape)
         except: pass
         try: self.f3_var_factor = np.prod(self.fc_weights_3_shape)
         except: pass
@@ -193,8 +198,11 @@ class network(object):
         ''' Network operations (besides forward passing) '''
         self.pred_var = self.output_layer
         self.targ_var = tf.placeholder(tf.float32, [None, self.out_size])
-        self.loss_op = tf.reduce_sum(tf.square( self.pred_var - self.targ_var ))
+        self.loss_op = self.getLossOp(self.pred_var, self.targ_var, override)
+
+        #self.loss_op = tf.reduce_sum(tf.square( self.pred_var - self.targ_var ))
         #self.loss_op = tf.reduce_sum(tf.abs( self.pred_var - self.targ_var ))
+
         if _optimizer_type==None:
             raise Exception("Please provide which optimizer.")
         if _optimizer_type[0]=='sgd':
@@ -217,7 +225,7 @@ class network(object):
         self.l1 = tf.nn.conv2d(\
                 input = self.input_layer, \
                 filter = self.conv_filter_1,\
-                strides = conv_strides_1, \
+                strides = self.conv_strides_1, \
                 padding = 'VALID', \
                 name = "conv1") + self.conv_bias_1
         if drp=='all': self.l1 = tf.nn.dropout(self.l1, 0.5)
@@ -226,7 +234,7 @@ class network(object):
         self.l2 = tf.nn.conv2d(\
                 input = self.l1_act, \
                 filter = self.conv_filter_2,\
-                strides = conv_strides_2, \
+                strides = self.conv_strides_2, \
                 padding = 'VALID', \
                 name = "conv2") + self.conv_bias_2 
         if drp=='all': self.l2 = tf.nn.dropout(self.l2, 0.5)
@@ -250,9 +258,10 @@ class network(object):
         drp = self.net_params['dropout'] in ['all']
         ''' Layer Construction (ie forward pass construction) '''
         self.input_layer = tf.placeholder(tf.float32, [None,                  \
-                self.gridsz[XDIM], self.gridsz[YDIM], N_LAYERS], 'input');    \
-
-        self.l1 = tf.matmul(self.input_layer, self.fc_weights_1, name='fc1')\
+                self.gridsz[XDIM],self.gridsz[YDIM],N_LAYERS], 'input');    \
+        self.inp_l = tf.contrib.layers.flatten(self.input_layer)
+        #self.l1 = tf.matmul(self.inp_l, self.fc_weights_1, name='fc1')\
+        self.l1 = tf.matmul(self.inp_l, self.fc_weights_1, name='fc1')\
                             + self.fc_bias_1
         if drp in ['all']:  self.l1 = tf.nn.dropout(self.l1, 0.5)
         self.l1_act = tf.nn.relu( self.l1 )
@@ -284,11 +293,12 @@ class network(object):
             self.fc3_size = FC_3_SIZE
             self.out_size = N_ACTIONS
             return
+        self.flat_inp_sz = self.gridsz[XDIM]*self.gridsz[YDIM]*N_LAYERS
         if 'cv1_size' in self.net_params:
             self.cv1_size = self.net_params['cv1_size']
         else: self.cv1_size = C1_NFILTERS
         if 'fc1_size' in self.net_params:
-            self.fc1_size = self.net_params['fc2_size']
+            self.fc1_size = self.net_params['fc1_size']
         else:  self.fc1_size = FC_1_SIZE
         if 'cv2_size' in self.net_params:
             self.cv2_size = self.net_params['cv2_size']
@@ -345,13 +355,13 @@ class network(object):
                     self.fc_weights_1_shape, dtype=tf.float32, seed=self.seed,\
                     minval=0.0, maxval=2.0/self.f1_var_factor * VAR_SCALE )
                 weights['fc1_b'] = tf.random_uniform(\
-                    (self.fc3_size,), dtype=tf.float32, seed=self.seed,\
+                    (self.fc1_size,), dtype=tf.float32, seed=self.seed,\
                     minval=0.0, maxval=2.0/self.f1_var_factor * VAR_SCALE )
                 weights['fc2'] = tf.random_uniform(\
                     self.fc_weights_2_shape, dtype=tf.float32, seed=self.seed,\
                     minval=0.0, maxval=2.0/self.f2_var_factor * VAR_SCALE )
                 weights['fc2_b'] = tf.random_uniform(\
-                    (self.fc3_size,), dtype=tf.float32, seed=self.seed,\
+                    (self.fc2_size,), dtype=tf.float32, seed=self.seed,\
                     minval=0.0, maxval=2.0/self.f2_var_factor * VAR_SCALE )
 
             ''' Last Layers:FC,out inits '''
@@ -372,6 +382,30 @@ class network(object):
                 maxval= 1.0/self.o4_var_factor * VAR_SCALE )
 
         return weights
+
+
+
+    ''' Use this to prescribe new loss functions. Default: square err.
+    Reference: http://stackoverflow.com/questions/39106732/how-do-i-combine...
+        ...-tf-absolute-and-tf-square-to-create-the-huber-loss-function-in '''
+    def getLossOp(self, pred, targ, override):
+        if override==None or not 'loss_function' in override:
+            return tf.reduce_sum(tf.square( self.pred_var - self.targ_var ))
+        lf = override['loss_function']
+        if lf == 'square':
+            return tf.reduce_sum(tf.square( self.pred_var - self.targ_var ))
+        if lf == 'huber':
+            if len(lf)>5: max_grad = float(lf[5:])
+            else: max_grad = DEFAULT_HUBER_SATURATION
+
+            err = tf.reduce_sum(tf.abs( pred - targ ))
+            mg = tf.constant(max_grad, name='max_grad')
+            lin = mg*(err-.5*mg)
+            quad = .5*err*err
+            return tf.where(err < mg, quad, lin)
+
+        #self.loss_op = 
+
 
 
     ''' Use this method to set a default session, so the user does not need 

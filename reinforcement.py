@@ -157,7 +157,8 @@ class reinforcement(object):
             o = override['netsize']
             if not len(o)%2==0: raise Exception("Invalid network structure init.")
             nlayers = len(o)/2
-            net_params = { o[i]+str(i+1)+'_size':o[i+nlayers] for i in range(nlayers) }
+            net_params = \
+                    { o[i]+str(i+1)+'_size':o[i+nlayers] for i in range(nlayers) }
         if 'optimizer_tup' in override:
             opt = override['optimizer_tup']
         else: opt = ('sgd')

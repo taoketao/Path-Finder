@@ -49,14 +49,18 @@ class experiment(object):
         but also a capacity '''
     def __init__(self, mode):
         self.iterator = 0;
-        self.seed=0
+        self.seed=42
         if mode=='ego-allo-test':
             self.version='v0-a_fixedloc'
             self.nsamples = 1
+            self.curseeds = list(range(self.seed,self.seed+self.nsamples))
             self.no_save = True
-            self.dest = './storage/5-15/dev/'
-            self.logfile = open (self.dest+'logfile.txt', 'w')
+            self.dest = './storage/5-17/cv-fc/'
+            self.logfile = open(os.path.join(self.dest+'logfile.txt'), 'w')
             self.run_exp('allo-ego')
+#            self.run_exp('egocentric')
+#            self.nsamples = 1
+#            self.run_exp('egocentric')
         self.logfile.close()
         call(["open", self.dest])
     def getseed(self): 
@@ -68,32 +72,44 @@ class experiment(object):
 
     ''' USER-FACING experiment method.  Please Manually Edit the options! '''
     def run_exp(self, centric, saveweights=False):
-        nsamples = 1
+        nsamples = self.nsamples
         self.trial_counter=0
 
         '''------------------'''
         ''' Options to edit: '''
         '''------------------'''
-        _training_epochs = [100]
-        mnas = [3]
+        _training_epochs = [3000]
+        mnas = [1]
         lrs = [1e-3]
-        epsilons = [0.5, '1/nx5']
+        epsilons = [0.7]#, 0.3, 'lindecay', '1/nx5', '1/nx15']
         #optimizers = [ ['sgd']]+ [['adam',i] for i in [1e-3,1e-4,1e-5,1e-6]] 
         optimizers = [ ['adam', 1e-6] ] 
-        network_sizes = [('cv','cv','fc',16,16,36),('cv','cv','fc',32,32,72)]
+        network_sizes = [\
+                ('fc','fc','fc',24,24,24),\
+                ('fc','fc','fc',30,30,30),\
+                ('fc','fc','fc',36,36,36),\
+                ('cv','cv','fc',24,24,24),\
+                ('cv','cv','fc',30,30,30),\
+                ('cv','cv','fc',36,36,36),\
+                ]
+#        network_sizes = [('cv','cv','fc',32,32,72),
+#                         ('cv','cv','fc',72,72,144),
+#                         ('cv','cv','fc',128,128,256),
+#                         ('fc','fc','fc',32,32,72),
+#                         ('fc','fc','fc',72,72,144),
+#                         ('fc','fc','fc',128,128,256)]
         data_modes = ['shuffled']#, 'ordered']
         gamesizes = [(5,5)]
-        smoothing = 5 # <- Adjust for plotting: higher=smoother
+        smoothing = 25 # <- Adjust for plotting: higher=smoother
         '''--------------------------'''
         ''' end of recommended edits '''
         '''--------------------------'''
 
         self.tot_num_trials = len(_training_epochs)*len(mnas)*len(lrs)*\
-                len(epsilons)*len(optimizers)*len(network_sizes)*len(data_modes)
+              len(epsilons)*len(optimizers)*len(network_sizes)*len(data_modes)
         saved_time_str = get_time_str(self.dest)
         self.MNA = []
         for mna in mnas:
-          self.seed = 0
           [[[[[[[ self.run_trial( epch, mna, lr, nsize, eps_expl, opmzr, gsz, \
                 centric, nsamples, dm, smoothing)\
                 for epch in _training_epochs ]\
@@ -126,57 +142,6 @@ class experiment(object):
 
 
 
-
-
-
-    def get_filesave_str(self, mna, lr, gsz, eps_expl, opmzr, \
-            nepochs, nsize, data_mode, centric, seed=None): 
-        if type(eps_expl)==float:
-            eps = '%2.e' % eps_expl 
-        else: eps = eps_expl.replace('/','_')
-        if type(opmzr)==list and len(opmzr)==2:
-            opmzr = '_'.join([opmzr[0], '%1.e' % opmzr[1]])
-        s= os.path.join(self.dest, self.version) + \
-                '-mna' + str(mna) + \
-                '-lr' + '%1.e' % lr + \
-                '-nepochs'+str(nepochs) +\
-                '-' + str(gsz).replace(', ', 'x') + \
-                '-nsamps_' + str(self.nsamples) + \
-                '-eps_' + str(eps) + \
-                '-opt_'+str(opmzr) + \
-                '-net'+'_'.join([str(i) for i in nsize]) + \
-                '-data_'+data_mode+'-frame_'+centric +\
-                '-seed_'+str(seed) if not seed==None else ''
-        return s
-
-     
-    def run_single_train_sess(self, nsamples, mna, lr, training_epochs, \
-            nsize, eps_expl, opmzr, gsz, data_mode, centric, curseed, s=''):
-        Tr_Successes = []; 
-        Te_Successes = []; 
-        states = None
-        for ri in range(nsamples):
-            print "seed:", curseed
-            ovr = {'max_num_actions': mna, 'learning_rate':lr, \
-                    'nepochs': training_epochs, 'netsize':nsize, \
-                    'epsilon':eps_expl, \
-                    'optimizer_tup':opmzr, 'rotation':False };
-            r = reinforcement(self.version, centric, override=ovr, \
-                    game_shape=gsz, data_mode=data_mode, seed=curseeds[ri])
-
-            results = r.run_session(params={\
-                'buffer_updates':False, 'rotational':False, 'printing':False}) 
-            Tr_Successes.append(results.get('train', 'successes'))
-            test_results = results.get('test', 'successes')
-            Te_Successes.append(test_results)
-            if training_epochs > 30 and len(s)>0:
-                self.logfile.write(s+' sample #'+str(ri)+\
-                        ' last 30 test accs: '+str(test_results[-30:]))
-            if states==None: 
-                states = results.get('states')
-        return  np.mean(np.array(Tr_Successes), axis=0), \
-                np.mean(np.array(Te_Successes), axis=0), states
-
     def run_trial(self, training_epochs, mna, lr, nsize, eps_expl, opmzr, gsz,\
             centric, nsamples, data_mode, smooth_factor=50):
         print("\n **********  NEW TRIAL, number "+str(1+\
@@ -192,25 +157,24 @@ class experiment(object):
         print("\t game input shape: "+str(gsz))
         print("\t optimizer: "+str(opmzr))
         self.trial_counter+=1
-        curseeds = [self.getseed() for ns in range(nsamples)]
-        #training_eps_ = training_eps * (1 if lr>0.001 else 2)
         s=self.get_filesave_str(mna, lr, gsz, eps_expl, opmzr, \
                 training_epochs, nsize, data_mode, centric, 0)
 
         if centric in ['allocentric', 'egocentric']:
             tr_successes, te_successes, states = self.run_single_train_sess(\
                     self.nsamples, mna, lr, training_epochs, nsize, eps_expl, \
-                    opmzr, gsz, data_mode, centric, curseeds, s)
+                    opmzr, gsz, data_mode, centric,  s)
             save_as_successes(s+'-successes', tr_successes, te_successes, \
                 states, smooth_factor, centric)
             return;
+
         elif centric=='allo-ego':
             tr_successes_e, te_successes_e, st_e = self.run_single_train_sess(\
                     self.nsamples, mna, lr, training_epochs, nsize, eps_expl, \
-                    opmzr, gsz, data_mode, 'egocentric', curseeds, s)
+                    opmzr, gsz, data_mode, 'egocentric',  s)
             tr_successes_a, te_successes_a, st_a = self.run_single_train_sess(\
                     self.nsamples, mna, lr, training_epochs, nsize, eps_expl, \
-                    opmzr, gsz, data_mode, 'allocentric', curseeds, s)
+                    opmzr, gsz, data_mode, 'allocentric',  s)
             assert(st_e==st_a)
             save_as_successes(s+'-successes', tr_successes_e, te_successes_e, \
                 st_e, smooth_factor, ['ego','allo'],
@@ -218,9 +182,36 @@ class experiment(object):
             return
         
 
+    def run_single_train_sess(self, nsamples, mna, lr, training_epochs, \
+            nsize, eps_expl, opmzr, gsz, data_mode, centric, s=''):
+        Tr_Successes = []; 
+        Te_Successes = []; 
+        states = None
+        for ri in range(nsamples):
+            ovr = {'max_num_actions': mna, 'learning_rate':lr, \
+                    'nepochs': training_epochs, 'netsize':nsize, \
+                    'epsilon':eps_expl, 'loss_function':'square', \
+                    'optimizer_tup':opmzr, 'rotation':False };
+            r = reinforcement(self.version, centric, override=ovr, \
+                    game_shape=gsz, data_mode=data_mode, \
+                    seed=self.curseeds[ri])
+            print "Running sample # "+str(ri+1)+'/'+str(nsamples)
+            results = r.run_session(params={\
+                'buffer_updates':False, 'rotational':False, 'printing':False}) 
+            Tr_Successes.append(results.get('train', 'successes'))
+            test_results = results.get('test', 'successes')
+            Te_Successes.append(test_results)
+            if training_epochs > 30 and len(s)>0:
+                self.logfile.write(s+' sample #'+str(ri)+\
+                    ' last 30 test accs: '+'\n'+str(test_results[-30:])+'\n')
+            if states==None: 
+                states = results.get('states')
+        return  np.mean(np.array(Tr_Successes), axis=0), \
+                np.mean(np.array(Te_Successes), axis=0), states
 
 
 
+    def __deprecated__(self):
         '''print "readout results: "
     print "\t avg tr, te losses:", list(np.mean(avg_losses[:,-1,:], axis=0))
     print "\t avg tr, te nsteps:", list(np.mean(avg_steps[:,-1,:], axis=0))
@@ -302,6 +293,30 @@ class experiment(object):
 
         #self.iterator+=1
         np.save(s+'-loss-graph', arr)
+
+
+
+
+
+    def get_filesave_str(self, mna, lr, gsz, eps_expl, opmzr, \
+            nepochs, nsize, data_mode, centric, seed=None): 
+        if type(eps_expl)==float:
+            eps = '%2.e' % eps_expl 
+        else: eps = eps_expl.replace('/','_')
+        if type(opmzr)==list and len(opmzr)==2:
+            opmzr = '_'.join([opmzr[0], '%1.e' % opmzr[1]])
+        s= os.path.join(self.dest, self.version) + \
+                '-mna' + str(mna) + \
+                '-lr' + '%1.e' % lr + \
+                '-nepochs'+str(nepochs) +\
+                '-' + str(gsz).replace(', ', 'x') + \
+                '-nsamps_' + str(self.nsamples) + \
+                '-eps_' + str(eps) + \
+                '-opt_'+str(opmzr) + \
+                '-net_'+'_'.join([str(i) for i in nsize]) + \
+                '-data_'+data_mode+'-frame_'+centric +\
+                '-seed_'+str(seed) if not seed==None else ''
+        return s
 
 
 #r = reinforcement('v1-fixedloc', override={'max_num_actions': 3, \
