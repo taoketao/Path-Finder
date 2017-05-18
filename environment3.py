@@ -129,7 +129,7 @@ class state(object):
         if self.grid[loc[XDIM], loc[YDIM], agentLayer]==1:    return agentLayer
         if self.grid[loc[XDIM], loc[YDIM], goalLayer]==1:     return goalLayer
         if not exception:
-            print "FLAG 98"
+            print("FLAG 98")
         return -1 # <- flag for 'empty square'
 
     def getAllLocs(self, m_or_i):
@@ -143,8 +143,8 @@ class state(object):
     def dump_state(self):
         self.desparse()
         for i in range(NUM_LAYERS):
-            print "Layer #"+str(i)+", the "+layer_names[i]+":"
-            print self.grid[:,:,i], '\n'
+            print("Layer #"+str(i)+", the "+layer_names[i]+":")
+            print(self.grid[:,:,i], '\n')
 
     ''' Return an identical but distinct version of this state object '''
     def copy(self):
@@ -186,28 +186,28 @@ class state(object):
         if self.isImBlocked(self.a_loc)==1.0: return False
         if long_version: # <- check extra properties for new init. Bloated!!
             if self.isImBlocked(self.a_loc)==1.0: 
-                print "FLAG 42"
+                print("FLAG 42")
                 return False
             if self.isMoBlocked(self.a_loc)==1.0: 
-                print "FLAG 25"
+                print("FLAG 25")
                 return False
             for x in range(self.gridsz[XDIM]):
               for y in range(self.gridsz[YDIM]):
                 if (self.grid[x, y, goalLayer] and \
                         self.grid[x, y, immobileLayer]): 
-                    print "FLAG 95"
+                    print("FLAG 95")
                     return False
                 if (self.grid[x, y, goalLayer] and \
                         self.grid[x, y, mobileLayer]): 
-                    print "FLAG 85"
+                    print("FLAG 85")
                     return False
                 if (self.grid[x, y, immobileLayer] and \
                         self.grid[x, y, mobileLayer]):
-                    print "FLAG 50"
+                    print("FLAG 50")
                     return False
                 if ((x==0 or y==0 or x==self.gridsz[XDIM]-1 or y==self.gridsz[YDIM]-1)\
                         and self.grid[x, y, immobileLayer]==0.0): 
-                    print "FLAG 05"
+                    print("FLAG 05")
                     return False
         return True
 
@@ -215,15 +215,15 @@ class state(object):
         if not self.sparse:
             for y in range(self.gridsz[1]):
                 for i in range(NUM_LAYERS):
-                    print self.grid[:,y,i], '\t',
-                print ''
+                    print(self.grid[:,y,i], '\t', end=' ')
+                print('')
         else:
-            print '{',
+            print('{', end=' ')
             for i in range(NUM_LAYERS):
                 if len(self.grid[i].data)==0: continue
-                print str(i)+':', self.grid[i].row, self.grid[i].col,
-                print self.grid[i].data,',',
-            print '}'
+                print(str(i)+':', self.grid[i].row, self.grid[i].col, end=' ')
+                print(self.grid[i].data,',', end=' ')
+            print('}')
 
 
 class environment_handler3(object):
@@ -263,7 +263,7 @@ class environment_handler3(object):
         S.post_agent(parameters['agent_loc'])
         S.post_goal(parameters['goal_loc'])
         S.post_immobile_blocks(parameters['immobiles_locs'])
-        if 'mobiles_locs' in parameters.keys():
+        if 'mobiles_locs' in list(parameters.keys()):
             S.post_mobile_blocks(parameters['mobiles_locs'])
         # S.dump_state();
         if not except_init and not self.checkValidState(S, long_version=True):
@@ -411,7 +411,7 @@ class environment_handler3(object):
                 elif flag==immobileLayer: l += '#'
                 elif flag==mobileLayer: l += 'O'
                 elif flag==-1: l += '-'
-            print ' '.join(l)
+            print(' '.join(l))
 
     def displayTransition(self, S1, S2):
         for y in range(self.gridsz[YDIM]):
@@ -430,10 +430,10 @@ class environment_handler3(object):
                 if flag==mobileLayer: l2 += 'O'
                 if flag==-1: l2 += '-'
             if not y==self.gridsz[YDIM]//2:
-                print ' '.join(l1), '    ', ' '.join(l2)
+                print(' '.join(l1), '    ', ' '.join(l2))
             else:
-                print ' '.join(l1), ' -> ', ' '.join(l2)
-        print ''
+                print(' '.join(l1), ' -> ', ' '.join(l2))
+        print('')
 
     def printOneLine(self, State, mode='print', ret_Is=False):
         ''' Prints the state as succintly as possible '''
@@ -454,9 +454,9 @@ class environment_handler3(object):
                 s+= ' I:'+str(m)
           if len(Is)==0:
             s+= ' [no inner I found]'
-        if mode=='print': print s; 
+        if mode=='print': print(s); 
         elif mode=='ret': return s;
-        else: print "ERR tag 82"
+        else: print("ERR tag 82")
 
     def getStateFromFile(self, filename, except_init='none'): 
         return self._read_state_file(filename, except_init)
@@ -499,7 +499,7 @@ class environment_handler3(object):
         if self._dist(s.get_goal_loc(), s.get_agent_loc()) == 1:
             self.optDist = 1;
             return;
-        print "Dist calculator not implemented for this state."
+        print("Dist calculator not implemented for this state.")
         return;
 
     def _l1_dist(self, a, b): return abs(a[0]-b[0])+abs(a[1]-b[1])
@@ -606,7 +606,7 @@ class state_generator(object):
         if cmpnt[ROT90]: s+= '90 '
         if cmpnt[ROT180]: s+= '180 '
         s+='}'
-        if print_or_ret=='print': print s
+        if print_or_ret=='print': print(s)
         elif print_or_ret=='return': return s
             
     def generate_all_states_fixedCenter(self, version, env, oriented=False):
@@ -628,7 +628,7 @@ class state_generator(object):
         if not (len(where)==2 and where[XDIM]>=1 and where[YDIM]>=1 and \
                 where[XDIM]+field_x < self.gridsz[XDIM] and \
                 where[YDIM]+field_y < self.gridsz[YDIM] ):
-            print "Invalid center for v1 init:", where
+            print("Invalid center for v1 init:", where)
             return None
         return where
     
@@ -777,15 +777,15 @@ def test_script1():
     X = foo.generate_all_states_fixedCenter('v1', env)
 
     for i,s in enumerate(X):
-        print i,':'
-        env.displayGameState(s); print ''
+        print(i,':')
+        env.displayGameState(s); print('')
         env.postOptimalNumSteps(s)
-    print "Min number of steps to solve above game: ", env.getOptimalNumSteps(random.choice(X))
-    print "Number of states generated:", len(X)
-    print "Above are all the possible valid game states that have a 3x3",
-    print " grid in a fixed location in which the agent is directly next",
-    print " to the goal (in any direction); that is, the first possible task."
-    print '--------------------------------------------------------'
+    print("Min number of steps to solve above game: ", env.getOptimalNumSteps(random.choice(X)))
+    print("Number of states generated:", len(X))
+    print("Above are all the possible valid game states that have a 3x3", end=' ')
+    print(" grid in a fixed location in which the agent is directly next", end=' ')
+    print(" to the goal (in any direction); that is, the first possible task.")
+    print('--------------------------------------------------------')
 
 def test_script2():
     # this script tests the ability to generate all game states for vers1.
@@ -797,32 +797,32 @@ def test_script2():
     for i,s in enumerate(X):
         env.displayGameState(s);
         env.postOptimalNumSteps(s)
-    print "Min number of steps to solve above game: ", env.getOptimalNumSteps(random.choice(X))
-    print "Number of states generated:", len(X)
-    print "Above are all the possible valid game states that have a 3x3",
-    print " grid in a fixed location in which the agent is directly next",
-    print " to the goal (in any direction); that is, the first possible task."
-    print '--------------------------------------------------------'
+    print("Min number of steps to solve above game: ", env.getOptimalNumSteps(random.choice(X)))
+    print("Number of states generated:", len(X))
+    print("Above are all the possible valid game states that have a 3x3", end=' ')
+    print(" grid in a fixed location in which the agent is directly next", end=' ')
+    print(" to the goal (in any direction); that is, the first possible task.")
+    print('--------------------------------------------------------')
 
 
 def test_script3():
     # This example script demonstrates the ability for a 
-    print "The following is a test example.  For reference, @ is the agent, X is"+\
-      " the goal, O is a movable block, and # is an immovable block."
+    print("The following is a test example.  For reference, @ is the agent, X is"+\
+      " the goal, O is a movable block, and # is an immovable block.")
 
     for fn in ["./data_files/states/3x3-diag+M.txt"]:#, "./data_files/states/3x4-diag+M.txt"]:
       for act_seq in [ [('d',2), ('l',1)], [('d',1), ('r',2), ('r',3), ('l',0)]]:
         env = environment_handler3()
         s0 = env.getStateFromFile(fn)
-        print "\nvalid initial state:", not s0==None;
+        print("\nvalid initial state:", not s0==None);
         env.displayGameState(s0); 
         s0.dump_grid()
         #for action in [ ('d',0), ('d',0), ('r',0), ('u',0) ]:
         for action in act_seq:
             a, r = action
-            s1 = env.performAction(s0, a,r);  print "\naction:",a,"action success:", \
-                env.checkIfValidAction(s0, a);  
-            print "Goal reached?: ", env.isGoalReached(s1)
+            s1 = env.performAction(s0, a,r);  print("\naction:",a,"action success:", \
+                env.checkIfValidAction(s0, a));  
+            print("Goal reached?: ", env.isGoalReached(s1))
             env.displayGameState(s1);
             s1.dump_grid()
             s0=s1
@@ -834,14 +834,14 @@ def test_script3():
 #            env.checkIfValidAction(s1, 'r');  env.displayGameState(s2);
 #        s3 = env.performAction(s2, 'u',0);  print "\naction: u, action success:", \
 #            env.checkIfValidAction(s2, 'u');  env.displayGameState(s3);
-        print '--------------------------------------------------------'
-    print "Above is a test script that demonstrates that the state-environment-actor ",
-    print "situation is coherent and functional."
+        print('--------------------------------------------------------')
+    print("Above is a test script that demonstrates that the state-environment-actor ", end=' ')
+    print("situation is coherent and functional.")
 
 
 def test_script4():
     for mode in ['egocentric', 'allocentric']:
-        print '--------------------------------------------------------'
+        print('--------------------------------------------------------')
         env = environment_handler3((5,5), mode, world_fill='roll')
         s0 = env.getStateFromFile('./data_files/states/3x3-basic-GU.txt', 'except')
         env.displayGameState(s0, exception=True)
@@ -856,4 +856,4 @@ if __name__=='__main__':
     #test_script2()
     #test_script3()
     test_script4()
-    print "DONE"
+    print("DONE")

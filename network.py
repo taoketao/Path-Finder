@@ -55,7 +55,7 @@ def pShortN(x,n):
     else: 
         for xi in x:
             pShort(xi,n-1)
-        print ''
+        print('')
 def get_time_str(path, prefix=''):
     t = time.localtime()
     return os.path.join(path, prefix+str(t[1])+'_'+str(t[2])+'_'+str(t[0])\
@@ -96,7 +96,7 @@ class network(object):
             self.learning_rate = override['learning_rate']
         else:
             self.learning_rate = LEARNING_RATE
-        self.layer_types = net_params.keys()
+        self.layer_types = list(net_params.keys())
 
         if not seed==None:
             tf.set_random_seed(seed)
@@ -108,6 +108,10 @@ class network(object):
         elif 'fc1_size' in self.layer_types and 'fc2_size' in self.layer_types \
                 and 'fc3_size' in self.layer_types:
             self.structure = 'fc-fc-fc-fc'
+        elif 'fc1_size' in self.layer_types and 'fc2_size' in self.layer_types:
+            self.structure = 'fc-fc-fc'
+        elif 'fc1_size' in self.layer_types:
+            self.structure = 'fc-fc'
         else: raise Exception("Invalid network build requested.")
 
 
@@ -125,15 +129,25 @@ class network(object):
         self.conv_strides_1 = (1,1,1,1)
         self.conv_strides_2 = (1,1,1,1)
 
-        self.fc_weights_1_shape = (self.flat_inp_sz, self.fc1_size)
-        self.fc_weights_2_shape = (self.fc1_size, self.fc2_size)
 
         if self.structure=='cv-cv-fc-fc':
+            self.fc_weights_1_shape = (self.flat_inp_sz, self.fc1_size)
+            self.fc_weights_2_shape = (self.fc1_size, self.fc2_size)
             self.fc_weights_3_shape =\
                 (self.cv2_size*np.prod(self.nconvs_2), self.fc3_size)
+            self.out_weights_4_shape = (self.fc3_size, self.out_size)
         elif self.structure=='fc-fc-fc-fc':
+            self.fc_weights_1_shape = (self.flat_inp_sz, self.fc1_size)
+            self.fc_weights_2_shape = (self.fc1_size, self.fc2_size)
             self.fc_weights_3_shape = (self.fc2_size, self.fc3_size)
-        self.out_weights_4_shape = (self.fc3_size, self.out_size)
+            self.out_weights_4_shape = (self.fc3_size, self.out_size)
+        elif self.structure=='fc-fc-fc':
+            self.fc_weights_1_shape = (self.flat_inp_sz, self.fc1_size)
+            self.fc_weights_2_shape = (self.fc1_size, self.fc2_size)
+            self.out_weights_4_shape = (self.fc2_size, self.out_size)
+        elif self.structure=='fc-fc':
+            self.fc_weights_1_shape = (self.flat_inp_sz, self.fc1_size)
+            self.out_weights_4_shape = (self.fc1_size, self.out_size)
 
 
         #   helper factors
@@ -405,29 +419,38 @@ class network(object):
                 weights['cv2_b'] = tf.random_uniform(\
                     (self.cv2_size,), dtype=tf.float32, seed=self.seed, \
                     minval = 0.0, maxval = 2.0/self.c2_var_factor * VAR_SCALE)
+                weights['fc3'] = tf.random_uniform(\
+                    self.fc_weights_3_shape, dtype=tf.float32, seed=self.seed,\
+                    minval=0.0, maxval=2.0/self.f3_var_factor * VAR_SCALE )
+                weights['fc3_b'] = tf.random_uniform(\
+                    (self.fc3_size,), dtype=tf.float32, seed=self.seed,\
+                    minval=0.0, maxval=2.0/self.f3_var_factor * VAR_SCALE )
 
-            if self.structure=='fc-fc-fc-fc':
-                ''' First Layers:FC inits '''
+            if self.structure[:5]=='fc-fc':
                 weights['fc1'] = tf.random_uniform(\
                     self.fc_weights_1_shape, dtype=tf.float32, seed=self.seed,\
                     minval=0.0, maxval=2.0/self.f1_var_factor * VAR_SCALE )
                 weights['fc1_b'] = tf.random_uniform(\
                     (self.fc1_size,), dtype=tf.float32, seed=self.seed,\
                     minval=0.0, maxval=2.0/self.f1_var_factor * VAR_SCALE )
+
+            if self.structure[:8]=='fc-fc-fc':
                 weights['fc2'] = tf.random_uniform(\
                     self.fc_weights_2_shape, dtype=tf.float32, seed=self.seed,\
                     minval=0.0, maxval=2.0/self.f2_var_factor * VAR_SCALE )
                 weights['fc2_b'] = tf.random_uniform(\
                     (self.fc2_size,), dtype=tf.float32, seed=self.seed,\
                     minval=0.0, maxval=2.0/self.f2_var_factor * VAR_SCALE )
+            else: self.fc3_size = self.fc2_size
 
-            ''' Last Layers:FC,out inits '''
-            weights['fc3'] = tf.random_uniform(\
-                self.fc_weights_3_shape, dtype=tf.float32, seed=self.seed,\
-                minval=0.0, maxval=2.0/self.f3_var_factor * VAR_SCALE )
-            weights['fc3_b'] = tf.random_uniform(\
-                (self.fc3_size,), dtype=tf.float32, seed=self.seed,\
-                minval=0.0, maxval=2.0/self.f3_var_factor * VAR_SCALE )
+            if self.structure[:8]=='fc-fc-fc':
+                weights['fc3'] = tf.random_uniform(\
+                    self.fc_weights_3_shape, dtype=tf.float32, seed=self.seed,\
+                    minval=0.0, maxval=2.0/self.f3_var_factor * VAR_SCALE )
+                weights['fc3_b'] = tf.random_uniform(\
+                    (self.fc3_size,), dtype=tf.float32, seed=self.seed,\
+                    minval=0.0, maxval=2.0/self.f3_var_factor * VAR_SCALE )
+            else: self.fc4_size = self.fc3_size
 
             weights['out4']= tf.random_uniform(\
                 self.out_weights_4_shape, dtype=tf.float32, seed=self.seed,\
@@ -468,7 +491,7 @@ class network(object):
         USER-FACING'''
     def setSess(self, s): 
         if not self.sess==None:
-            print "Warning: sess is already initialized, overwriting. Tag 66"
+            print("Warning: sess is already initialized, overwriting. Tag 66")
         self.sess = s;
 
     def _checkInit(self): 
@@ -504,16 +527,16 @@ class network(object):
     # see self.update(..) below
     def update_with_Debug_Output(self,s0,s1_est,s1_valid,targ,\
             Q0_sa_FP,R_a0_hat,a0_est):
-        print('action',ACTION_NAMES[a0_est], a0_est, ' reward:',R_a0_hat)
-        print("s0:\t\t", env.printOneLine(s0, 'ret'))
-        print("s1_est:\t\t", env.printOneLine(s1_est, 'ret'))
-        print("s1_valid:\t", env.printOneLine(s1_valid, 'ret'))
+        print(('action',ACTION_NAMES[a0_est], a0_est, ' reward:',R_a0_hat))
+        print(("s0:\t\t", env.printOneLine(s0, 'ret')))
+        print(("s1_est:\t\t", env.printOneLine(s1_est, 'ret')))
+        print(("s1_valid:\t", env.printOneLine(s1_valid, 'ret')))
         print("(pred == orig Q(s0).)")
-        print('targ:\t\t ', targ)
-        print('pred:\t\t ', Q0_sa_FP)
+        print(('targ:\t\t ', targ))
+        print(('pred:\t\t ', Q0_sa_FP))
         self.update([s0], [targ], [Q0_sa_FP])
-        print('updated Q(s0):\t ', Net.getQVals([s0]))
-        print("unchanged Q(s1): ", Q1_sa_FP)
+        print(('updated Q(s0):\t ', Net.getQVals([s0])))
+        print(("unchanged Q(s1): ", Q1_sa_FP))
 
     ''' The USER-FACING method for applying gradient descent or other model
         improvements. Please provide lists of corresponding s0, Q_target,
@@ -541,7 +564,7 @@ class network(object):
         self._checkInit()
         all_trainable_weights = self.sess.run({t.name:t for t in self.trainable_vars})
         weightsave_args = {'file':get_time_str(dest,"SavedWeights_"+prefix)}
-        for wname,W in all_trainable_weights.items():
+        for wname,W in list(all_trainable_weights.items()):
             weightsave_args[wname] = W
         np.savez(**weightsave_args)
 
@@ -581,7 +604,7 @@ if __name__=='__main__':
     OUT_DIR = './storage/5-04/'
     EXP_DIR = './experiments/5-04/'
     env = environment_handler2(DUMMY_GRIDSZ)
-    print(os.listdir(OUT_DIR))
+    print((os.listdir(OUT_DIR)))
     N1 = network(env, load_weights_path=None)
 
     s = tf.Session()
@@ -599,7 +622,7 @@ if __name__=='__main__':
     for li in l:
         if 'SavedWeights' in li:
             os.remove(os.path.join(OUT_DIR,li))
-    print os.listdir(OUT_DIR)
+    print(os.listdir(OUT_DIR))
 
     ##################################################
 

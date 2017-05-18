@@ -52,17 +52,14 @@ class experiment(object):
         self.seed=42
         if mode=='ego-allo-test':
             self.version='v0-a_fixedloc'
-            self.nsamples = 8
+            self.nsamples = 5
             self.curseeds = list(range(self.seed,self.seed+self.nsamples))
             self.no_save = False
-            self.dest = './storage/5-17/cv-fc-dev/'
+            self.dest = './storage/5-18/dev1/'
             self.logfile = open(os.path.join(self.dest+'logfile.txt'), 'w')
             self.run_exp('allo-ego')
-#            self.run_exp('egocentric')
-#            self.nsamples = 1
-#            self.run_exp('egocentric')
         self.logfile.close()
-        call(["open", self.dest])
+        #call(["open", self.dest])
     def getseed(self): 
         self.seed += 1
         tf.set_random_seed(self.seed)
@@ -78,17 +75,18 @@ class experiment(object):
         '''------------------'''
         ''' Options to edit: '''
         '''------------------'''
-        _training_epochs = [4000]
+        _training_epochs = [2000]
         mnas = [1]
         lrs = [1e-3]
         epsilons = [0.7]#, 0.3, 'lindecay', '1/nx5', '1/nx15']
         #optimizers = [ ['sgd']]+ [['adam',i] for i in [1e-3,1e-4,1e-5,1e-6]] 
         optimizers = [ ['adam', 1e-6] ] 
         network_sizes = [\
-                #('fc','fc','fc',32,32,32),\
-                ('cv','cv','fc',36,36,36),\
-                ('fc','fc','fc',36,36,36),\
-                #('fc','fc','fc',40,40,40),\
+                ('fc',4),\
+                ('fc',36),\
+                ('fc','fc',36,36),\
+                ('fc',24),\
+                ('fc','fc',24,24),\
                 ]
         data_modes = ['shuffled']#, 'ordered']
         gamesizes = [(5,5)]
@@ -127,8 +125,8 @@ class experiment(object):
                 for gsz in gamesizes]\
                 for data_mode in data_modes]
 
-        print '\n-----------------------------------------'
-        print '-----------------------------------------\n'
+        print('\n-----------------------------------------')
+        print('-----------------------------------------\n')
 
 
 
@@ -136,18 +134,18 @@ class experiment(object):
 
     def run_trial(self, training_epochs, mna, lr, nsize, eps_expl, opmzr, gsz,\
             centric, nsamples, data_mode, smooth_factor=50):
-        print("\n **********  NEW TRIAL, number "+str(1+\
-            self.trial_counter)+'/'+str(self.tot_num_trials))
-        print("\t max number of actions: "+str(mna))
-        print("\t learning rate: "+str(lr))
-        print("\t num training epochs: "+str(training_epochs))
-        print("\t samplesl "+str(self.nsamples))
-        print("\t frame: "+centric)
-        print("\t data mode: "+str(data_mode))
-        print("\t exploration epsilon: "+str(eps_expl))
-        print("\t network shape: "+str(nsize))
-        print("\t game input shape: "+str(gsz))
-        print("\t optimizer: "+str(opmzr))
+        print(("\n **********  NEW TRIAL, number "+str(1+\
+            self.trial_counter)+'/'+str(self.tot_num_trials)))
+        print(("\t max number of actions: "+str(mna)))
+        print(("\t learning rate: "+str(lr)))
+        print(("\t num training epochs: "+str(training_epochs)))
+        print(("\t samplesl "+str(self.nsamples)))
+        print(("\t frame: "+centric))
+        print(("\t data mode: "+str(data_mode)))
+        print(("\t exploration epsilon: "+str(eps_expl)))
+        print(("\t network shape: "+str(nsize)))
+        print(("\t game input shape: "+str(gsz)))
+        print(("\t optimizer: "+str(opmzr)))
         self.trial_counter+=1
         s=self.get_filesave_str(mna, lr, gsz, eps_expl, opmzr, \
                 training_epochs, nsize, data_mode, centric, 0)
@@ -187,7 +185,7 @@ class experiment(object):
             r = reinforcement(self.version, centric, override=ovr, \
                     game_shape=gsz, data_mode=data_mode, \
                     seed=self.curseeds[ri])
-            print "Running sample # "+str(ri+1)+'/'+str(nsamples)
+            print("Running sample # "+str(ri+1)+'/'+str(nsamples))
             results = r.run_session(params={ 'disp_avg_losses':20,\
                 'buffer_updates':False, 'rotational':False, 'printing':False}) 
             Tr_losses.append(results.get('train', 'losses'))
@@ -334,4 +332,4 @@ class experiment(object):
 
 experiment(mode='ego-allo-test')
 
-print "Done."
+print("Done.")

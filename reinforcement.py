@@ -39,7 +39,7 @@ class session_results(object):
         self.nepisodes = n_episodes
 
     def put(self, epoch, episode, data): 
-        if not 'mode' in data.keys(): 
+        if not 'mode' in list(data.keys()): 
             raise Exception("Provide mode: train or test.")
         if data['mode']=='train': mode = 0 
         if data['mode']=='test' : mode = 1 
@@ -150,7 +150,7 @@ class reinforcement(object):
             }[which_game]
         if 'printing'in override and override['printing']==True:
             for i,s in enumerate(init_states):
-                print("State",i); self.env.displayGameState(s, mode=2); 
+                print(("State",i)); self.env.displayGameState(s, mode=2); 
                 print('---------------------')
         self.which_game = which_game
         self.init_states = init_states
@@ -161,7 +161,7 @@ class reinforcement(object):
         if 'netsize' in override:
             o = override['netsize']
             if not len(o)%2==0: raise Exception("Invalid network structure init.")
-            nlayers = len(o)/2
+            nlayers = int(len(o)/2)
             net_params = \
                     { o[i]+str(i+1)+'_size':o[i+nlayers] for i in range(nlayers) }
         if 'optimizer_tup' in override:
@@ -190,7 +190,7 @@ class reinforcement(object):
         valid_action_flag = self.env.checkIfValidAction(s0, motion_est)
         if valid_action_flag:
             goal_reached = self.env.isGoalReached(s1_est)
-            if printing: print "--> Yields valid", a0_est%4, a0_est/4
+            if printing: print("--> Yields valid", a0_est%4, a0_est/4)
             return a0_est, s1_est, REWARD if goal_reached else NO_REWARD, \
                     goal_reached, valid_action_flag
 
@@ -278,12 +278,12 @@ class reinforcement(object):
                 if len(last_n_test_losses)>5: last_n_test_losses.pop(0)
 
             if epoch%250==0: 
-                print("Epoch #"+str(epoch)+"/"+str(self.training_epochs)),
-                print '\tlast '+str(params['disp_avg_losses'])+' losses',\
-                        'averaged:', 
+                print(("Epoch #"+str(epoch)+"/"+str(self.training_epochs)), end=' ')
+                print('\tlast '+str(params['disp_avg_losses'])+' losses',\
+                        'averaged:', end=' ') 
                 for ls in np.mean(np.array(last_n_test_losses),axis=0):
-                    print '%1.2e' % ls ,
-                print ''
+                    print('%1.2e' % ls, end=' ')
+                print('')
                 if not params['printing']: 
                     continue
                 if epoch>0:
@@ -292,9 +292,9 @@ class reinforcement(object):
                     rng = [-1]
                 print("Q values for last several actions:")
                 for wq in rng:
-                    print('\t'+P_ACTION_NAMES[Qvals[wq]['action']]+': ['+\
+                    print(('\t'+P_ACTION_NAMES[Qvals[wq]['action']]+': ['+\
                             ', '.join(["%1.5f"% p for p in Qvals[wq]['Q']])+\
-                            ']; corr?: '+str(int(Qvals[wq]['reward'])))
+                            ']; corr?: '+str(int(Qvals[wq]['reward']))))
 
         return episode_results
 
@@ -314,7 +314,7 @@ class reinforcement(object):
         update_buff = []
         num_a = 0
         wasGoalReached = False
-        if printing: print '\n\n'
+        if printing: print('\n\n')
         last_loss=-1.0
         states_log = [_s0]
         attempted_actions = -1*np.ones((self.max_num_actions,))

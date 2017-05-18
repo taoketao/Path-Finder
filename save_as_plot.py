@@ -15,8 +15,8 @@ def smooth(arr, smoothing):
     except: raise Exception("bad smoothing value: "+str(smoothing))
 
     if not arr.shape[0]%smoothing==0: 
-        print("Warning: smoothing factor does not evenly divide array: "+\
-                str(arr.shape[0])+' & '+str(smoothing))
+        print(("Warning: smoothing factor does not evenly divide array: "+\
+                str(arr.shape[0])+' & '+str(smoothing)))
 
     Arr = np.empty(shape=arr.shape)
     for i in range(arr.shape[0] / smoothing):
@@ -31,7 +31,7 @@ def save_as_plot1(fns, lr=None, mna=None, nsamples=None, which='l', \
 
     # shape convention: (2,x,y,2) where the first 2 is losses & nsteps, x is
     # nsamples, y is max_num_actions, and the last 2 is train / test.
-    print fns
+    print(fns)
     if type(fns)==str:
         tmp = fns
         fns = [tmp]
@@ -42,15 +42,15 @@ def save_as_plot1(fns, lr=None, mna=None, nsamples=None, which='l', \
         x = np.load(fn)
         try:
             lr = fn.split('lr')[1].split('-(')[0]
-            print("lr:"+str(lr))
+            print(("lr:"+str(lr)))
         except: lr=0
         try:
             mna = fn.split('mna-')[1].split('-lr')[0]
-            print("mna:"+str(mna))
+            print(("mna:"+str(mna)))
         except: mna=0
         try:
             nsamples = fn.split('nsamples')[1].split('.npy')[0]
-            print("nsamples:"+str(nsamples))
+            print(("nsamples:"+str(nsamples)))
         except: nsamples=0
 
         #if not nsamples: nsamples = str(x.shape[1])
@@ -88,7 +88,7 @@ def save_as_plot1(fns, lr=None, mna=None, nsamples=None, which='l', \
             plt.plot(np.mean(losses[:,:,1], axis=0), c='yellow', linestyle='-') 
             # test loss
         if 'S' in which:
-            print nsteps.shape
+            print(nsteps.shape)
             plt.plot(np.mean(nsteps[:,:,0], axis=0), c='green', linestyle='-') 
             # avg train steps
             plt.plot(np.mean(nsteps[:,:,1], axis=0), c='purple', linestyle='-') 
@@ -122,7 +122,7 @@ def save_as_plot1(fns, lr=None, mna=None, nsamples=None, which='l', \
         plt.close()
         if delete_npy:
             os.remove(fn)
-    print "Success: last file stored at", fn[:-4]
+    print("Success: last file stored at", fn[:-4])
 
 
 def save_as_Qplot2(mat, save_to_loc):
@@ -189,7 +189,7 @@ def save_as_Qplot3(mat, save_to_loc, trialinfo='[none provided]'):
     plt.plot()
     #plt.show()
 #    plt.savefig(save_to_loc+'.pdf', dpi=100, format='pdf')
-    print save_to_loc
+    print(save_to_loc)
     plt.savefig(save_to_loc, dpi=100)
     plt.close()
 
@@ -295,7 +295,7 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
 
 def save_as_state_actions1(state_indices, state_mat, gridsz, dest):
     sorted_states_indices = sorted(list(state_indices.keys())) # dict sorted
-    print state_mat.shape, len(sorted_states_indices)
+    print(state_mat.shape, len(sorted_states_indices))
     
     lY = int(round(len(sorted_states_indices)**0.5))
     lX = int(ceil(len(sorted_states_indices)**0.5))
@@ -388,7 +388,7 @@ def save_as_plot(fns, lr, mna, nsamples=None):
         plt.savefig(fn[:-4])
         plt.close()
 
-    print "Success: last file stored at", fn[:-4]
+    print("Success: last file stored at", fn[:-4])
 
 
 
@@ -485,7 +485,7 @@ def save_final_losses_process(dest):
 
     hyperparams = set() 
     for a in attributes:
-        for k in a.keys():
+        for k in list(a.keys()):
             hyperparams.add(k)
     hyperparams = list(hyperparams)
     hp_map = { h:k for k,h in enumerate(hyperparams) }
@@ -534,24 +534,24 @@ def save_final_losses_process(dest):
 #        print '  rt var', '{:1.3f}'.format(VarAccsIsolated [ index ]), 
 #        print ''
 
-    print '\n===============================\n'
-    print "VARIABLES:", WhichVary, ', taking on:'
+    print('\n===============================\n')
+    print("VARIABLES:", WhichVary, ', taking on:')
     for h in hyperparams:
         if h in WhichVary:
             for X in sorted(list(nversions[hp_map[h]])):
-                print '\t','{0[0]:<15}{0[1]:<15}'.format((h+':',str(X)))
-    print "while these were held constant:"
+                print('\t','{0[0]:<15}{0[1]:<15}'.format((h+':',str(X))))
+    print("while these were held constant:")
     for h in hyperparams:
         if h not in WhichVary:
             #print '\t',h,':\t', 
-            print '\t','{0[0]:<15}{0[1]:<15}'.format((h+':',\
-                    str(tuple(nversions[hp_map[h]])[0])))
+            print('\t','{0[0]:<15}{0[1]:<15}'.format((h+':',\
+                    str(tuple(nversions[hp_map[h]])[0]))))
 #    nversions = []
 #    for _ in WhichVaryVals: print '\n',_
-    print '\nThis analysis studies', len(attributes)*attributes[-1]['nsamples'],\
-            'total trained networks.'
-    print 'All recorded values:'
-    print "\n\nThe following are marginals over certain variables.\n"
+    print('\nThis analysis studies', len(attributes)*attributes[-1]['nsamples'],\
+            'total trained networks.')
+    print('All recorded values:')
+    print("\n\nThe following are marginals over certain variables.\n")
     if ndim==2: Margs = [ (0,), (1,), tuple([])]
     if ndim==3: Margs = [ (0,), (1,), (2,), (0,2), (1,2), (0,1), tuple([]) ]
     if ndim==4: Margs = [ (0,), (1,), (2,), (3,), (0,1), (0,2), (1,2),\
@@ -569,38 +569,38 @@ def save_final_losses_process(dest):
         s = tuple(s); 
 
         #print 'present over', [WhichVary[m] for m in s] ,'&',
-        if len(margs)==0: print "all responses:"
-        else: print 'marginalize over', [WhichVary[m] for m in margs],':'
+        if len(margs)==0: print("all responses:")
+        else: print('marginalize over', [WhichVary[m] for m in margs],':')
         MEAN = np.mean(AvgAccsIsolated, axis=margs)
         MINS = np.min(MinAccsIsolated, axis=margs)
         MAXS = np.max(MaxAccsIsolated, axis=margs)
         if len(s)==1:
             for i in range(arr_shape[s[0]]):
-                print WhichVaryVals[s[0]][i], '{0[0]:>8}'.format([\
+                print(WhichVaryVals[s[0]][i], '{0[0]:>8}'.format([\
                         '\tavg']),'\t','{:1.3f}'.format(MEAN[i]),\
                         '\tmin', '{:1.3f}'.format(MINS[i]),\
-                        '\tmax', '{:1.3f}'.format(MAXS[i])
+                        '\tmax', '{:1.3f}'.format(MAXS[i]))
 #                print WhichVaryVals[s[0]][i], '\tavg', '{:1.3f}'.format(MEAN[i]),\
 #                        '\tmin', '{:1.3f}'.format(MINS[i]),\
 #                        '\tmax', '{:1.3f}'.format(MAXS[i])
         if len(s)==2:
           for i in range(arr_shape[s[0]]):
             for j in range(arr_shape[s[1]]):
-                print WhichVaryVals[s[0]][i], WhichVaryVals[s[1]][j],\
+                print(WhichVaryVals[s[0]][i], WhichVaryVals[s[1]][j],\
                         '\tavg', '{:1.3f}'.format(MEAN[i,j]),\
                         '\tmin', '{:1.3f}'.format(MINS[i,j]),\
-                        '\tmax', '{:1.3f}'.format(MAXS[i,j])
+                        '\tmax', '{:1.3f}'.format(MAXS[i,j]))
         if len(s)==3:
           for i in range(arr_shape[s[0]]):
            for j in range(arr_shape[s[1]]):
             for k in range(arr_shape[s[2]]):
-                print WhichVaryVals[s[0]][i], WhichVaryVals[s[1]][j],\
+                print(WhichVaryVals[s[0]][i], WhichVaryVals[s[1]][j],\
                         WhichVaryVals[s[2]][k],\
                         '\tavg', '{:1.3f}'.format(MEAN[i,j,k]),\
                         '\tmin', '{:1.3f}'.format(MINS[i,j,k]),\
-                        '\tmax', '{:1.3f}'.format(MAXS[i,j,k])
+                        '\tmax', '{:1.3f}'.format(MAXS[i,j,k]))
 
-        print '' 
+        print('') 
 
 
 if __name__=='__main__':
