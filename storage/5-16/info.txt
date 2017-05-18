@@ -87,8 +87,6 @@ Results:
       (even by a little) makes me suspect that the LR is simply weak.
     - On average, Ego does better.  It both has a higher max (0.967 vs
       0.8) and has a higher mean as well (by 6%): 0.354 vs 0.414. 
-  Cross margins:
-      Ignoring lr=1e-5 results, 
 
 
 
@@ -153,7 +151,7 @@ ego netfc_fc_fc_72_72_144 	    avg 0.250 	min 0.100 	max 0.367
 
 
 ===============================
-===============================
+
 Experiment 3 all results.
 
 
