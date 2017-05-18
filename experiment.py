@@ -52,10 +52,10 @@ class experiment(object):
         self.seed=42
         if mode=='ego-allo-test':
             self.version='v0-a_fixedloc'
-            self.nsamples = 1
+            self.nsamples = 8
             self.curseeds = list(range(self.seed,self.seed+self.nsamples))
-            self.no_save = True
-            self.dest = './storage/5-17/cv-fc/'
+            self.no_save = False
+            self.dest = './storage/5-17/cv-fc-dev/'
             self.logfile = open(os.path.join(self.dest+'logfile.txt'), 'w')
             self.run_exp('allo-ego')
 #            self.run_exp('egocentric')
@@ -78,26 +78,18 @@ class experiment(object):
         '''------------------'''
         ''' Options to edit: '''
         '''------------------'''
-        _training_epochs = [3000]
+        _training_epochs = [4000]
         mnas = [1]
         lrs = [1e-3]
         epsilons = [0.7]#, 0.3, 'lindecay', '1/nx5', '1/nx15']
         #optimizers = [ ['sgd']]+ [['adam',i] for i in [1e-3,1e-4,1e-5,1e-6]] 
         optimizers = [ ['adam', 1e-6] ] 
         network_sizes = [\
-                ('fc','fc','fc',24,24,24),\
-                ('fc','fc','fc',30,30,30),\
-                ('fc','fc','fc',36,36,36),\
-                ('cv','cv','fc',24,24,24),\
-                ('cv','cv','fc',30,30,30),\
+                #('fc','fc','fc',32,32,32),\
                 ('cv','cv','fc',36,36,36),\
+                ('fc','fc','fc',36,36,36),\
+                #('fc','fc','fc',40,40,40),\
                 ]
-#        network_sizes = [('cv','cv','fc',32,32,72),
-#                         ('cv','cv','fc',72,72,144),
-#                         ('cv','cv','fc',128,128,256),
-#                         ('fc','fc','fc',32,32,72),
-#                         ('fc','fc','fc',72,72,144),
-#                         ('fc','fc','fc',128,128,256)]
         data_modes = ['shuffled']#, 'ordered']
         gamesizes = [(5,5)]
         smoothing = 25 # <- Adjust for plotting: higher=smoother
@@ -122,10 +114,10 @@ class experiment(object):
                 for dm in data_modes]
           if self.no_save: continue#return
           [[[[[[[ save_as_plot1(self.get_filesave_str(mna, lr, gsz, eps_expl,\
-                    opmzr, epch, nsize, data_mode, centric) +\
+                    opmzr, epch, nsize, data_mode, centric, 0) +\
                     '-loss-graph.npy', \
-                    str(lr), str(mna), str(nsamples), which='L S', \
-                    div=N_EPS_PER_EPOCH)
+                    str(lr), str(mna), str(nsamples), which='l', \
+                    div=N_EPS_PER_EPOCH, smoothing=smoothing)
                 for epch in _training_epochs ]\
                 #for mna in mnas ]\
                 for lr in lrs ]\
@@ -149,7 +141,7 @@ class experiment(object):
         print("\t max number of actions: "+str(mna))
         print("\t learning rate: "+str(lr))
         print("\t num training epochs: "+str(training_epochs))
-        print("\t samples: "+str(self.nsamples))
+        print("\t samplesl "+str(self.nsamples))
         print("\t frame: "+centric)
         print("\t data mode: "+str(data_mode))
         print("\t exploration epsilon: "+str(eps_expl))
@@ -184,8 +176,8 @@ class experiment(object):
 
     def run_single_train_sess(self, nsamples, mna, lr, training_epochs, \
             nsize, eps_expl, opmzr, gsz, data_mode, centric, s=''):
-        Tr_Successes = []; 
-        Te_Successes = []; 
+        Tr_Successes = [];      Tr_losses = []; 
+        Te_Successes = [];      Te_losses = [];  
         states = None
         for ri in range(nsamples):
             ovr = {'max_num_actions': mna, 'learning_rate':lr, \
@@ -196,8 +188,11 @@ class experiment(object):
                     game_shape=gsz, data_mode=data_mode, \
                     seed=self.curseeds[ri])
             print "Running sample # "+str(ri+1)+'/'+str(nsamples)
-            results = r.run_session(params={\
+            results = r.run_session(params={ 'disp_avg_losses':20,\
                 'buffer_updates':False, 'rotational':False, 'printing':False}) 
+            Tr_losses.append(results.get('train', 'losses'))
+            Te_losses.append(results.get('test' , 'losses'))
+
             Tr_Successes.append(results.get('train', 'successes'))
             test_results = results.get('test', 'successes')
             Te_Successes.append(test_results)
@@ -206,6 +201,9 @@ class experiment(object):
                     ' last 30 test accs: '+'\n'+str(test_results[-30:])+'\n')
             if states==None: 
                 states = results.get('states')
+        
+        np.save(s+'-loss-graph.npy', np.array([Tr_losses, Te_losses]))
+
         return  np.mean(np.array(Tr_Successes), axis=0), \
                 np.mean(np.array(Te_Successes), axis=0), states
 
@@ -285,14 +283,14 @@ class experiment(object):
 
         #'-nsamples' + str(nsamples) + \
         s=self.get_filesave_str(mna, lr, gsz, eps_expl, opmzr, \
-                training_epochs, nsize, data_mode, centric)
+                training_epochs, nsize, data_mode, centric, 0)
             
         
         save_as_state_actions1(states_found, StateMat, gsz, \
                         s+'-per_state_actions')
 
         #self.iterator+=1
-        np.save(s+'-loss-graph', arr)
+        np.save(s+'-loss-graph.npy', arr)
 
 
 
@@ -315,7 +313,7 @@ class experiment(object):
                 '-opt_'+str(opmzr) + \
                 '-net_'+'_'.join([str(i) for i in nsize]) + \
                 '-data_'+data_mode+'-frame_'+centric +\
-                '-seed_'+str(seed) if not seed==None else ''
+                ('-seed_'+str(seed) if not seed==None else '')
         return s
 
 

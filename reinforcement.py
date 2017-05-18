@@ -39,7 +39,8 @@ class session_results(object):
         self.nepisodes = n_episodes
 
     def put(self, epoch, episode, data): 
-        if not 'mode' in data.keys(): raise Exception("Provide mode:train or test.")
+        if not 'mode' in data.keys(): 
+            raise Exception("Provide mode: train or test.")
         if data['mode']=='train': mode = 0 
         if data['mode']=='test' : mode = 1 
         D = data.copy()
@@ -59,6 +60,10 @@ class session_results(object):
         if p1 in ['train','test'] and p2 in ['nsteps'] and p3==None:
             return np.array( [[ x['num_a'] for x in X]\
                         for X in self._get(ALL,ALL,p1)])
+        if p1 in ['train','test'] and p2 in ['losses'] and p3==None:
+            return np.array( [[ x['loss'] for x in X]\
+                        for X in self._get(ALL,ALL,p1)])
+
         if p1=='states' and p2==None and p3==None: # return state tups:
             uniq_st = set()
             for i in range(self.nepochs):
@@ -208,6 +213,8 @@ class reinforcement(object):
             params['dropout-all'] = True
         if not 'printing' in params:
             params['printing'] = False
+        if not 'disp_avg_losses' in params:
+            params['disp_avg_losses'] = 15
         return params
 
     ''' RUN_SESSION: like Simple_Train but less 'simple': Handles the 
@@ -226,6 +233,8 @@ class reinforcement(object):
                 len(self.init_states))
 
         Buff=[]
+        last_n_test_losses = []
+
         with sess.as_default():
           tf.set_random_seed(self.seed)
           for epoch in range(self.training_epochs):
@@ -250,7 +259,9 @@ class reinforcement(object):
                         'num_a': ret[0], \
                         'success': ret[1], \
                         'attempted_actions':ret[2], \
+                        'loss':ret[3], \
                         'mode': 'train' })
+            ret_e = [None]*len(next_states)
             for episode,s0 in enumerate(next_states):
                 ret = self._do_one_episode(s0, epoch, 'test')
                 episode_results.put(epoch, episode,  \
@@ -258,10 +269,21 @@ class reinforcement(object):
                         'num_a': ret[0], \
                         'success': ret[1], \
                         'attempted_actions':ret[2], \
+                        'loss':ret[3], \
                         'mode': 'test' })
+                ret_e[episode] = ret[3]
+
+            if params['disp_avg_losses'] > 0:
+                last_n_test_losses.append(ret_e)
+                if len(last_n_test_losses)>5: last_n_test_losses.pop(0)
 
             if epoch%250==0: 
-                print("Epoch #"+str(epoch)+"/"+str(self.training_epochs))
+                print("Epoch #"+str(epoch)+"/"+str(self.training_epochs)),
+                print '\tlast '+str(params['disp_avg_losses'])+' losses',\
+                        'averaged:', 
+                for ls in np.mean(np.array(last_n_test_losses),axis=0):
+                    print '%1.2e' % ls ,
+                print ''
                 if not params['printing']: 
                     continue
                 if epoch>0:
@@ -289,7 +311,6 @@ class reinforcement(object):
 
 
     def _do_one_episode(self, _s0, epoch, mode, buffer_me=True, printing=False):
-        Qs = []; losses=[]; steps=[]
         update_buff = []
         num_a = 0
         wasGoalReached = False
@@ -297,6 +318,7 @@ class reinforcement(object):
         last_loss=-1.0
         states_log = [_s0]
         attempted_actions = -1*np.ones((self.max_num_actions,))
+        losses = []
         for nth_action in range(self.max_num_actions):
             s0 = states_log[-1]
             if self.env.isGoalReached(s0): 
@@ -333,12 +355,15 @@ class reinforcement(object):
                 else:
                     targ[a0_est] -= GAMMA * a0_est
             if mode=='train':
-                self.Net.update(orig_states=[s0], targ_list=[targ])
+                losses.append(self.Net.update(\
+                        orig_states=[s0], targ_list=[targ]))
+            elif mode=='test':
+                losses.append(self.Net.getLoss([Q0], [targ]))
            
             states_log.append(s1_valid)
 
         if self.env.isGoalReached(states_log[-1]): wasGoalReached=True
-        return num_a, wasGoalReached, attempted_actions
+        return num_a, wasGoalReached, attempted_actions, np.mean(losses)
     
 
 

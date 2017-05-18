@@ -8,12 +8,30 @@ ACTION_NAMES = { 0:"U", 1:'R', 2:"D", 3:'L' }
 UDIR = 0; RDIR = 1; DDIR = 2; LDIR = 3
 MAX_DISPLAY_EPOCHS = 100
 
-def save_as_plot1(fns, lr=None, mna=None, nsamples=None, which='L S', \
-        div=1.0, delete_npy=False):
+
+def smooth(arr, smoothing):
+    if smoothing==1: return arr
+    try: int(smoothing); assert(smoothing>0);
+    except: raise Exception("bad smoothing value: "+str(smoothing))
+
+    if not arr.shape[0]%smoothing==0: 
+        print("Warning: smoothing factor does not evenly divide array: "+\
+                str(arr.shape[0])+' & '+str(smoothing))
+
+    Arr = np.empty(shape=arr.shape)
+    for i in range(arr.shape[0] / smoothing):
+        arr_val = np.mean(arr[i*smoothing:(i+1)*smoothing,:], axis=0)
+        for smth in range(smoothing):
+            Arr[i*smoothing+smth,:] = arr_val
+    return Arr
+    
+def save_as_plot1(fns, lr=None, mna=None, nsamples=None, which='l', \
+        div=1.0, delete_npy=False, smoothing=20):
     # all parameters should be strings
 
     # shape convention: (2,x,y,2) where the first 2 is losses & nsteps, x is
     # nsamples, y is max_num_actions, and the last 2 is train / test.
+    print fns
     if type(fns)==str:
         tmp = fns
         fns = [tmp]
@@ -39,12 +57,17 @@ def save_as_plot1(fns, lr=None, mna=None, nsamples=None, which='L S', \
         try:
             losses, nsteps, rewards = x;
         except:
-            losses, nsteps = x;
-        print "SHAPES:", losses.shape, nsteps.shape
-        factor=20; lmax = int(rewards.shape[1]/factor)*factor
-        meanmean = np.mean(rewards[:,:lmax,1], axis=0).reshape(rewards.shape[1]/factor, factor)
-        meanmean = np.mean(meanmean, axis=0)
-        X = np.repeat(meanmean, rewards.shape[1]/factor)
+            try: 
+                losses, nsteps = x;
+            except:
+                losses = x;
+        #print "SHAPES:", losses.shape, nsteps.shape
+        factor=20; lmax = int(losses.shape[1]/factor)*factor
+        if not which=='l':
+            meanmean = np.mean(rewards[:,:lmax,1], axis=0).reshape(\
+                    rewards.shape[1]/factor, factor)
+            meanmean = np.mean(meanmean, axis=0)
+            X = np.repeat(meanmean, rewards.shape[1]/factor)
         if 'O' in which:
             plt.plot(X, c='orange')
             o_string = ", orange=interpolated test n steps"
@@ -55,6 +78,10 @@ def save_as_plot1(fns, lr=None, mna=None, nsamples=None, which='L S', \
             # avg train R
             plt.plot(np.mean(rewards[:,:,1], axis=0), c='black', linestyle='-') 
             # avg test R
+        if 'l'==which:
+            plt.plot(np.mean(smooth(losses[0,:,:], smoothing), axis=1), \
+                    c='red', linestyle='-') 
+
         if 'L' in which:
             plt.plot(np.mean(losses[:,:,0], axis=0), c='blue', linestyle='-') 
             # train loss
@@ -70,16 +97,24 @@ def save_as_plot1(fns, lr=None, mna=None, nsamples=None, which='L S', \
             plt.xlabel("Epoch.  blue=train err, yellow=test err,\n green=avg "+\
                     "train steps, purple=avg test steps"+o_string+\
                     "\nred: avg train reward, black: avg test reward")
+        elif 'l' in which:
+            plt.xlabel("test err per epoch, smoothed in chunks of "+str(smoothing))
         else:
             plt.xlabel("Episode.  blue=train err, yellow=test err,\n green=avg "+\
                        "train steps, purple=avg test steps"+o_string)
 
-        plt.title("Training and testing error averaged over "+str(nsamples)+" samples with lr "+lr)
-        plt.ylabel("Avg reward, loss, num actions taken.  Max num actions: "+str(mna))
+        if not 'l' in which:
+          plt.title("Training and testing error averaged over "+str(nsamples)+\
+                " samples with lr "+lr)
+          plt.ylabel("Avg reward, loss, num actions taken.  Max num actions: "+str(mna))
+        else:
+          plt.title("Testing error averaged over "+str(nsamples)+\
+                " samples with lr "+lr, fontsize=12)
+          plt.ylabel("Avg loss.  Max num actions: "+str(mna))
 
-    
         plt.tight_layout(1.2)
-#        plt.ylim(0, 4)
+        #plt.ylim(-0.1, 1.1)
+        plt.ylim(bottom=0)
         plt.savefig(fn[:-4])
         #plt.savefig(fn[:-4]+'.pdf', format='pdf')
         #plt.show()
@@ -199,25 +234,12 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
     else:
         raise Exception("Please tell me if this is egocentric, allocentric, etc")
 
-    Tr = np.empty(tr.shape)
-    Te = np.empty(te.shape)
+    Tr = smooth(tr, smoothing)
+    Te = smooth(te, smoothing)
     if twoplots: 
-        Tr2 = np.empty(tr2.shape)
-        Te2 = np.empty(te2.shape)
-    for i in range(tr.shape[0] / smoothing):
-        tr_val = np.mean(tr[i*smoothing:(i+1)*smoothing,:], axis=0)
-        te_val = np.mean(te[i*smoothing:(i+1)*smoothing,:], axis=0)
-        for smth in range(smoothing):
-            Tr[i*smoothing+smth,:] = tr_val
-            Te[i*smoothing+smth,:] = te_val
-        if not twoplots: 
-            continue
-        tr2_val = np.mean(tr2[i*smoothing:(i+1)*smoothing,:], axis=0)
-        te2_val = np.mean(te2[i*smoothing:(i+1)*smoothing,:], axis=0)
-        for smth in range(smoothing):
-            Tr2[i*smoothing+smth,:] = tr2_val
-            Te2[i*smoothing+smth,:] = te2_val
-    
+        Tr2 = smooth(tr2, smoothing)
+        Te2 = smooth(te2, smoothing)
+
     #f,ax = plt.subplots(2,2, sharex=True, sharey=True)
     gs = gridspec.GridSpec(2, 3)
     plt.subplots_adjust(\
@@ -528,6 +550,7 @@ def save_final_losses_process(dest):
 #    for _ in WhichVaryVals: print '\n',_
     print '\nThis analysis studies', len(attributes)*attributes[-1]['nsamples'],\
             'total trained networks.'
+    print 'All recorded values:'
     print "\n\nThe following are marginals over certain variables.\n"
     if ndim==2: Margs = [ (0,), (1,), tuple([])]
     if ndim==3: Margs = [ (0,), (1,), (2,), (0,2), (1,2), (0,1), tuple([]) ]
@@ -546,7 +569,8 @@ def save_final_losses_process(dest):
         s = tuple(s); 
 
         #print 'present over', [WhichVary[m] for m in s] ,'&',
-        print 'marginalize over', [WhichVary[m] for m in margs],':'
+        if len(margs)==0: print "all responses:"
+        else: print 'marginalize over', [WhichVary[m] for m in margs],':'
         MEAN = np.mean(AvgAccsIsolated, axis=margs)
         MINS = np.min(MinAccsIsolated, axis=margs)
         MAXS = np.max(MaxAccsIsolated, axis=margs)

@@ -168,20 +168,29 @@ class network(object):
                     name='cv2', trainable=_train, dtype=tf.float32)
             self.conv_bias_2 = tf.Variable(inits['cv2_b'], \
                     name='cv2_b', trainable=_train, dtype=tf.float32)
-        elif self.structure=='fc-fc-fc-fc':
+
+            self.fc_weights_3 = tf.Variable(inits['fc3'], \
+                    name='fc3', trainable=_train)
+            self.fc_bias_3 = tf.Variable(inits['fc3_b'], \
+                    name='fc3_b', trainable=_train)
+        elif 'fc-fc' in self.structure:
             self.fc_weights_1 = tf.Variable(inits['fc1'], \
                     name='fc1', trainable=_train)
             self.fc_bias_1 = tf.Variable(inits['fc1_b'], \
                     name='fc1_b', trainable=_train)
-            self.fc_weights_2 = tf.Variable(inits['fc2'], \
-                    name='fc2', trainable=_train)
-            self.fc_bias_2 = tf.Variable(inits['fc2_b'], \
-                    name='fc2_b', trainable=_train)
+            if 'fc-fc-fc' in self.structure:
+                self.fc_weights_2 = tf.Variable(inits['fc2'], \
+                        name='fc2', trainable=_train)
+                self.fc_bias_2 = tf.Variable(inits['fc2_b'], \
+                        name='fc2_b', trainable=_train)
+            if 'fc-fc-fc-fc' in self.structure:
+                self.fc_weights_3 = tf.Variable(inits['fc3'], \
+                        name='fc3', trainable=_train)
+                self.fc_bias_3 = tf.Variable(inits['fc3_b'], \
+                        name='fc3_b', trainable=_train)
+        else: raise Exception("Network structure not recognized: "+self.structure)
 
-        self.fc_weights_3 = tf.Variable(inits['fc3'], \
-                name='fc3', trainable=_train)
-        self.fc_bias_3 = tf.Variable(inits['fc3_b'], \
-                name='fc3_b', trainable=_train)
+
         self.fc_weights_4 = tf.Variable(inits['out4'], \
                 name='out4', trainable=_train)
         self.fc_bias_4 = tf.Variable(inits['out4_b'], \
@@ -192,16 +201,23 @@ class network(object):
             self._construct_2conv_2fc_network(load_weights_path, _train, \
                     _optimizer_type)
         elif self.structure=='fc-fc-fc-fc':
-            self._construct_4fc_network(load_weights_path, _train, \
-                    _optimizer_type)
+            self._construct_4fc_network(load_weights_path, _train, _optimizer_type)
+        elif self.structure=='fc-fc-fc':
+            self._construct_3fc_network(load_weights_path, _train, _optimizer_type)
+        elif self.structure=='fc-fc':
+            self._construct_2fc_network(load_weights_path, _train, _optimizer_type)
+        else:
+            raise Exception("Network structure not recognized: "+self.structure)
 
         ''' Network operations (besides forward passing) '''
         self.pred_var = self.output_layer
         self.targ_var = tf.placeholder(tf.float32, [None, self.out_size])
-        self.loss_op = self.getLossOp(self.pred_var, self.targ_var, override)
+        self.loss_op_updating = self.getLossOp(self.pred_var, self.targ_var, override)
 
-        #self.loss_op = tf.reduce_sum(tf.square( self.pred_var - self.targ_var ))
-        #self.loss_op = tf.reduce_sum(tf.abs( self.pred_var - self.targ_var ))
+        self.pred_test_var = tf.placeholder(tf.float32, [None, self.out_size])
+        self.targ_test_var = tf.placeholder(tf.float32, [None, self.out_size])
+        self.loss_op_test = self.getLossOp(self.pred_test_var, \
+                self.targ_test_var, override)
 
         if _optimizer_type==None:
             raise Exception("Please provide which optimizer.")
@@ -211,7 +227,7 @@ class network(object):
         elif _optimizer_type[0]=='adam':
             self.optimizer = tf.train.AdamOptimizer(self.learning_rate, \
                     epsilon=_optimizer_type[1])
-        self.updates = self.optimizer.minimize(self.loss_op)
+        self.updates = self.optimizer.minimize(self.loss_op_updating)
  
         self.sess = None
 
@@ -282,6 +298,47 @@ class network(object):
         self.trainable_vars = [self.fc_weights_1, self.fc_weights_2, \
                 self.fc_weights_3, self.fc_weights_4, self.fc_bias_1, \
                 self.fc_bias_2, self.fc_bias_3, self.fc_bias_4]
+
+    def _construct_3fc_network(self, load_weights_path, _train, _optimizer_type):
+        drp = self.net_params['dropout'] in ['all']
+        ''' Layer Construction (ie forward pass construction) '''
+        self.input_layer = tf.placeholder(tf.float32, [None,                  \
+                self.gridsz[XDIM],self.gridsz[YDIM],N_LAYERS], 'input');    \
+        self.inp_l = tf.contrib.layers.flatten(self.input_layer)
+        #self.l1 = tf.matmul(self.inp_l, self.fc_weights_1, name='fc1')\
+        self.l1 = tf.matmul(self.inp_l, self.fc_weights_1, name='fc1')\
+                            + self.fc_bias_1
+        if drp in ['all']:  self.l1 = tf.nn.dropout(self.l1, 0.5)
+        self.l1_act = tf.nn.relu( self.l1 )
+
+        self.l2 = tf.matmul(self.l1_act, self.fc_weights_2, name='fc2')\
+                            + self.fc_bias_2
+        if drp in ['all', 'last']:  self.l2 = tf.nn.dropout(self.l2, 0.5)
+        self.l2_act = tf.nn.relu( self.l2 )
+
+        self.l4 = tf.matmul(self.l2_act, self.fc_weights_4, name='out4')
+        self.output_layer = tf.nn.tanh(self.l4+self.fc_bias_4, name='output')
+
+        self.trainable_vars = [self.fc_weights_1, self.fc_weights_2, \
+                self.fc_weights_4, self.fc_bias_1, \
+                self.fc_bias_2, self.fc_bias_4]
+
+    def _construct_2fc_network(self, load_weights_path, _train, _optimizer_type):
+        drp = self.net_params['dropout'] in ['all']
+        ''' Layer Construction (ie forward pass construction) '''
+        self.input_layer = tf.placeholder(tf.float32, [None,                  \
+                self.gridsz[XDIM],self.gridsz[YDIM],N_LAYERS], 'input');    \
+        self.inp_l = tf.contrib.layers.flatten(self.input_layer)
+        self.l1 = tf.matmul(self.inp_l, self.fc_weights_1, name='fc1')\
+                            + self.fc_bias_1
+        if drp in ['all','last']:  self.l1 = tf.nn.dropout(self.l1, 0.5)
+        self.l1_act = tf.nn.relu( self.l1 )
+
+        self.l4 = tf.matmul(self.l1_act, self.fc_weights_4, name='out4')
+        self.output_layer = tf.nn.tanh(self.l4+self.fc_bias_4, name='output')
+
+        self.trainable_vars = [self.fc_weights_4,  self.fc_bias_4]
+
 
 
     def _init_layer_structure(self):
@@ -390,10 +447,10 @@ class network(object):
         ...-tf-absolute-and-tf-square-to-create-the-huber-loss-function-in '''
     def getLossOp(self, pred, targ, override):
         if override==None or not 'loss_function' in override:
-            return tf.reduce_sum(tf.square( self.pred_var - self.targ_var ))
+            return tf.reduce_sum(tf.square( pred - targ ))
         lf = override['loss_function']
         if lf == 'square':
-            return tf.reduce_sum(tf.square( self.pred_var - self.targ_var ))
+            return tf.reduce_sum(tf.square( pred - targ ))
         if lf == 'huber':
             if len(lf)>5: max_grad = float(lf[5:])
             else: max_grad = DEFAULT_HUBER_SATURATION
@@ -403,8 +460,6 @@ class network(object):
             lin = mg*(err-.5*mg)
             quad = .5*err*err
             return tf.where(err < mg, quad, lin)
-
-        #self.loss_op = 
 
 
 
@@ -462,18 +517,25 @@ class network(object):
 
     ''' The USER-FACING method for applying gradient descent or other model
         improvements. Please provide lists of corresponding s0, Q_target,
-        Q_est as generated elsewhere. '''
+        Q_est as generated elsewhere.  Returns loss.  '''
     def update(self, orig_states, targ_list):
         self._checkInit()
         if self.version=='NEURAL':
             targs = np.array(targ_list, ndmin=2)
             s0s = np.array([s.grid for s in orig_states])
-            return self.sess.run([self.loss_op, self.updates], feed_dict=\
+#            return self.sess.run([self.loss_op_updating, self.updates], feed_dict=\
+#                    {self.targ_var: targs, self.input_layer: s0s} )[0]
+            return self.sess.run([self.loss_op_updating, self.updates], feed_dict=\
                     {self.targ_var: targs, self.input_layer: s0s} )[0]
         else:
             raise Exception("Network version not set to NEURAL; cannot update")
         print("Flag 99")
         return -1
+
+    def getLoss(self, pred, targ):
+        return self.sess.run([self.loss_op_test], feed_dict={\
+                    self.pred_test_var: np.array(pred),  \
+                    self.targ_test_var: np.array(targ)})[0]
 
     def save_weights(self, dest, prefix=''):
         self._checkInit()
