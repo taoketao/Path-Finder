@@ -6,6 +6,8 @@ import sys, time
 import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')
 from environment3 import *
 from network import *
 from scipy.sparse import coo_matrix
@@ -161,7 +163,7 @@ class reinforcement(object):
         if 'netsize' in override:
             o = override['netsize']
             if not len(o)%2==0: raise Exception("Invalid network structure init.")
-            nlayers = int(len(o)/2)
+            nlayers = len(o)//2
             net_params = \
                     { o[i]+str(i+1)+'_size':o[i+nlayers] for i in range(nlayers) }
         if 'optimizer_tup' in override:

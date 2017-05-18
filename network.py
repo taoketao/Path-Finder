@@ -6,6 +6,8 @@ import sys, time, random
 import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')
 from environment2 import *
 from save_as_plot import *
 
@@ -85,6 +87,7 @@ class network(object):
             _optimizer_type=None, override=None, load_weights_path=None, \
             rot=False, _game_version='v1', net_params=None, seed=None):
         ''' inputs: shape [batch, X, Y, 4-action-layers]. '''
+        self._train = _train
         self.gridsz = _env.getGridSize()
         self.env = _env
         self.version = _version;
@@ -171,44 +174,7 @@ class network(object):
             weights.  Last layer gets small mean-zero weights for tanh. '''
         
         inits = self._initialize_weights(load_weights_path)
-
-        ''' trainable Tensorflow Variables '''
-        if self.structure=='cv-cv-fc-fc':
-            self.conv_filter_1 = tf.Variable(inits['cv1'], \
-                    name='cv1', trainable=_train, dtype=tf.float32)
-            self.conv_bias_1 = tf.Variable(inits['cv1_b'], \
-                    name='cv1_b', trainable=_train, dtype=tf.float32)
-            self.conv_filter_2 = tf.Variable(inits['cv2'], \
-                    name='cv2', trainable=_train, dtype=tf.float32)
-            self.conv_bias_2 = tf.Variable(inits['cv2_b'], \
-                    name='cv2_b', trainable=_train, dtype=tf.float32)
-
-            self.fc_weights_3 = tf.Variable(inits['fc3'], \
-                    name='fc3', trainable=_train)
-            self.fc_bias_3 = tf.Variable(inits['fc3_b'], \
-                    name='fc3_b', trainable=_train)
-        elif 'fc-fc' in self.structure:
-            self.fc_weights_1 = tf.Variable(inits['fc1'], \
-                    name='fc1', trainable=_train)
-            self.fc_bias_1 = tf.Variable(inits['fc1_b'], \
-                    name='fc1_b', trainable=_train)
-            if 'fc-fc-fc' in self.structure:
-                self.fc_weights_2 = tf.Variable(inits['fc2'], \
-                        name='fc2', trainable=_train)
-                self.fc_bias_2 = tf.Variable(inits['fc2_b'], \
-                        name='fc2_b', trainable=_train)
-            if 'fc-fc-fc-fc' in self.structure:
-                self.fc_weights_3 = tf.Variable(inits['fc3'], \
-                        name='fc3', trainable=_train)
-                self.fc_bias_3 = tf.Variable(inits['fc3_b'], \
-                        name='fc3_b', trainable=_train)
-        else: raise Exception("Network structure not recognized: "+self.structure)
-
-
-        self.fc_weights_4 = tf.Variable(inits['out4'], \
-                name='out4', trainable=_train)
-        self.fc_bias_4 = tf.Variable(inits['out4_b'], \
-                name='out4_b', trainable=_train)
+        self.make_variables(inits)
 
         ''' Construct network: options. '''
         if self.structure=='cv-cv-fc-fc':
@@ -289,6 +255,7 @@ class network(object):
         ''' Layer Construction (ie forward pass construction) '''
         self.input_layer = tf.placeholder(tf.float32, [None,                  \
                 self.gridsz[XDIM],self.gridsz[YDIM],N_LAYERS], 'input');    \
+        print(self.input_layer.get_shape())
         self.inp_l = tf.contrib.layers.flatten(self.input_layer)
         #self.l1 = tf.matmul(self.inp_l, self.fc_weights_1, name='fc1')\
         self.l1 = tf.matmul(self.inp_l, self.fc_weights_1, name='fc1')\
@@ -351,7 +318,8 @@ class network(object):
         self.l4 = tf.matmul(self.l1_act, self.fc_weights_4, name='out4')
         self.output_layer = tf.nn.tanh(self.l4+self.fc_bias_4, name='output')
 
-        self.trainable_vars = [self.fc_weights_4,  self.fc_bias_4]
+        self.trainable_vars = [self.fc_weights_1,  self.fc_bias_1, \
+                self.fc_weights_4,  self.fc_bias_4]
 
 
 
@@ -443,7 +411,7 @@ class network(object):
                     minval=0.0, maxval=2.0/self.f2_var_factor * VAR_SCALE )
             else: self.fc3_size = self.fc2_size
 
-            if self.structure[:8]=='fc-fc-fc':
+            if self.structure[:11]=='fc-fc-fc-fc':
                 weights['fc3'] = tf.random_uniform(\
                     self.fc_weights_3_shape, dtype=tf.float32, seed=self.seed,\
                     minval=0.0, maxval=2.0/self.f3_var_factor * VAR_SCALE )
@@ -463,7 +431,43 @@ class network(object):
 
         return weights
 
+    def make_variables(self, inits):
+        ''' trainable Tensorflow Variables '''
+        if self.structure=='cv-cv-fc-fc':
+            self.conv_filter_1 = tf.Variable(inits['cv1'], \
+                    name='cv1', trainable=self._train, dtype=tf.float32)
+            self.conv_bias_1 = tf.Variable(inits['cv1_b'], \
+                    name='cv1_b', trainable=self._train, dtype=tf.float32)
+            self.conv_filter_2 = tf.Variable(inits['cv2'], \
+                    name='cv2', trainable=self._train, dtype=tf.float32)
+            self.conv_bias_2 = tf.Variable(inits['cv2_b'], \
+                    name='cv2_b', trainable=self._train, dtype=tf.float32)
 
+            self.fc_weights_3 = tf.Variable(inits['fc3'], \
+                    name='fc3', trainable=self._train)
+            self.fc_bias_3 = tf.Variable(inits['fc3_b'], \
+                    name='fc3_b', trainable=self._train)
+        elif 'fc-fc' in self.structure:
+            self.fc_weights_1 = tf.Variable(inits['fc1'], \
+                    name='fc1', trainable=self._train)
+            self.fc_bias_1 = tf.Variable(inits['fc1_b'], \
+                    name='fc1_b', trainable=self._train)
+            if 'fc-fc-fc' in self.structure:
+                self.fc_weights_2 = tf.Variable(inits['fc2'], \
+                        name='fc2', trainable=self._train)
+                self.fc_bias_2 = tf.Variable(inits['fc2_b'], \
+                        name='fc2_b', trainable=self._train)
+            if 'fc-fc-fc-fc' in self.structure:
+                self.fc_weights_3 = tf.Variable(inits['fc3'], \
+                        name='fc3', trainable=self._train)
+                self.fc_bias_3 = tf.Variable(inits['fc3_b'], \
+                        name='fc3_b', trainable=self._train)
+        else: raise Exception("Network structure not recognized: "+self.structure)
+
+        self.fc_weights_4 = tf.Variable(inits['out4'], \
+                name='out4', trainable=self._train)
+        self.fc_bias_4 = tf.Variable(inits['out4_b'], \
+                name='out4_b', trainable=self._train)
 
     ''' Use this to prescribe new loss functions. Default: square err.
     Reference: http://stackoverflow.com/questions/39106732/how-do-i-combine...

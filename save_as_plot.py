@@ -1,6 +1,8 @@
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')
 from matplotlib import gridspec, font_manager
 from math import ceil, floor
 
@@ -19,7 +21,7 @@ def smooth(arr, smoothing):
                 str(arr.shape[0])+' & '+str(smoothing)))
 
     Arr = np.empty(shape=arr.shape)
-    for i in range(arr.shape[0] / smoothing):
+    for i in range(arr.shape[0] // smoothing):
         arr_val = np.mean(arr[i*smoothing:(i+1)*smoothing,:], axis=0)
         for smth in range(smoothing):
             Arr[i*smoothing+smth,:] = arr_val
@@ -41,17 +43,18 @@ def save_as_plot1(fns, lr=None, mna=None, nsamples=None, which='l', \
         files.append(fn)
         x = np.load(fn)
         try:
-            lr = fn.split('lr')[1].split('-(')[0]
+            lr = fn.split('lr')[1].split('-')[0]
             print(("lr:"+str(lr)))
         except: lr=0
         try:
-            mna = fn.split('mna-')[1].split('-lr')[0]
+            mna = fn.split('mna-')[1].split('-')[0]
             print(("mna:"+str(mna)))
         except: mna=0
         try:
-            nsamples = fn.split('nsamples')[1].split('.npy')[0]
+            nsamples = max(fn.split('nsamples')[1].split('.npy')[0],\
+                            fn.split('nsamps')[1].split('-')[0])
             print(("nsamples:"+str(nsamples)))
-        except: nsamples=0
+        except:  nsamples=0
 
         #if not nsamples: nsamples = str(x.shape[1])
         try:
@@ -62,12 +65,12 @@ def save_as_plot1(fns, lr=None, mna=None, nsamples=None, which='l', \
             except:
                 losses = x;
         #print "SHAPES:", losses.shape, nsteps.shape
-        factor=20; lmax = int(losses.shape[1]/factor)*factor
+        factor=20; lmax = (losses.shape[1]//factor)*factor
         if not which=='l':
             meanmean = np.mean(rewards[:,:lmax,1], axis=0).reshape(\
-                    rewards.shape[1]/factor, factor)
+                    rewards.shape[1]//factor, factor)
             meanmean = np.mean(meanmean, axis=0)
-            X = np.repeat(meanmean, rewards.shape[1]/factor)
+            X = np.repeat(meanmean, rewards.shape[1]//factor)
         if 'O' in which:
             plt.plot(X, c='orange')
             o_string = ", orange=interpolated test n steps"
@@ -334,13 +337,13 @@ def save_as_state_actions1(state_indices, state_mat, gridsz, dest):
 
             clrs = [(0,'blue'), (1,'red'), (2,'green'), (3,'yellow')]
             for ci,clr in clrs:
-                ax[st_i / lX, st_i % lY, trte].plot(effective_eps, \
+                ax[st_i // lX, st_i % lY, trte].plot(effective_eps, \
                             data[ci,:], color=clr)
-                ax[st_i / lX, st_i % lY, trte].fill_between(effective_eps, \
+                ax[st_i // lX, st_i % lY, trte].fill_between(effective_eps, \
                         data[ci,:], color=clr)
                 #np.random.shuffle(clrs)
 
-            ax[st_i/lX,st_i%lY,trte].text(-0.35*nepochs,0,\
+            ax[st_i//lX,st_i%lY,trte].text(-0.35*nepochs,0,\
                 _make_str(St_key, gridsz, trte), fontsize=9, family='monospace')
 
     plt.gcf().set_size_inches(4*lX,4*lY)
@@ -348,7 +351,7 @@ def save_as_state_actions1(state_indices, state_mat, gridsz, dest):
             ACTION_NAMES[0]+"; RED:"+ACTION_NAMES[1]+"; GREEN:"+\
             ACTION_NAMES[2]+"; YELLOW:"+ACTION_NAMES[3])
     
-    s = " / "+str(nepochs / MAX_DISPLAY_EPOCHS) \
+    s = " / "+str(nepochs // MAX_DISPLAY_EPOCHS) \
                 if nepochs>MAX_DISPLAY_EPOCHS else ''
     ax[0,lY-1,1].set_xlabel("Epoch")
 

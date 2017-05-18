@@ -6,6 +6,8 @@ import sys, time, os
 from subprocess import call
 import tensorflow as tf
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 from save_as_plot import *
@@ -52,10 +54,10 @@ class experiment(object):
         self.seed=42
         if mode=='ego-allo-test':
             self.version='v0-a_fixedloc'
-            self.nsamples = 5
+            self.nsamples = 20
             self.curseeds = list(range(self.seed,self.seed+self.nsamples))
             self.no_save = False
-            self.dest = './storage/5-18/dev1/'
+            self.dest = './storage/5-18/stat-test-2/'
             self.logfile = open(os.path.join(self.dest+'logfile.txt'), 'w')
             self.run_exp('allo-ego')
         self.logfile.close()
@@ -75,7 +77,7 @@ class experiment(object):
         '''------------------'''
         ''' Options to edit: '''
         '''------------------'''
-        _training_epochs = [2000]
+        _training_epochs = [10000]
         mnas = [1]
         lrs = [1e-3]
         epsilons = [0.7]#, 0.3, 'lindecay', '1/nx5', '1/nx15']
@@ -87,10 +89,14 @@ class experiment(object):
                 ('fc','fc',36,36),\
                 ('fc',24),\
                 ('fc','fc',24,24),\
+                ('cv','cv','fc',24,24,24),\
+                ('cv','cv','fc',16,16,16),\
+                ('fc','fc','fc',24,24,24),\
+                ('fc','fc','fc',16,16,16),\
                 ]
         data_modes = ['shuffled']#, 'ordered']
         gamesizes = [(5,5)]
-        smoothing = 25 # <- Adjust for plotting: higher=smoother
+        smoothing = 50 # <- Adjust for plotting: higher=smoother
         '''--------------------------'''
         ''' end of recommended edits '''
         '''--------------------------'''
