@@ -1,4 +1,4 @@
-'''                                                                            |
+'''                                                                           |
 Morgan Bryant, April 2017
 Test framework intended to run experiments. 
 '''
