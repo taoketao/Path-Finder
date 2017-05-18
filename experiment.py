@@ -51,11 +51,11 @@ class experiment(object):
         self.iterator = 0;
         self.seed=42
         if mode=='ego-allo-test':
-            self.version='v0-a_fixedloc'
-            self.nsamples = 8
+            self.version='v2-a_fixedloc'
+            self.nsamples = 10
             self.curseeds = list(range(self.seed,self.seed+self.nsamples))
             self.no_save = False
-            self.dest = './storage/5-17/cv-fc-dev/'
+            self.dest = './storage/5-17/cv-fc-size/'
             self.logfile = open(os.path.join(self.dest+'logfile.txt'), 'w')
             self.run_exp('allo-ego')
 #            self.run_exp('egocentric')
@@ -78,17 +78,18 @@ class experiment(object):
         '''------------------'''
         ''' Options to edit: '''
         '''------------------'''
-        _training_epochs = [4000]
+        _training_epochs = [3000]
         mnas = [1]
         lrs = [1e-3]
         epsilons = [0.7]#, 0.3, 'lindecay', '1/nx5', '1/nx15']
         #optimizers = [ ['sgd']]+ [['adam',i] for i in [1e-3,1e-4,1e-5,1e-6]] 
         optimizers = [ ['adam', 1e-6] ] 
         network_sizes = [\
-                #('fc','fc','fc',32,32,32),\
-                ('cv','cv','fc',36,36,36),\
-                ('fc','fc','fc',36,36,36),\
-                #('fc','fc','fc',40,40,40),\
+                ('fc',4),\
+                ('fc',12),\
+                ('fc',36),\
+                ('fc','fc',24,24),\
+                ('fc','fc',36,36),\
                 ]
         data_modes = ['shuffled']#, 'ordered']
         gamesizes = [(5,5)]
@@ -161,9 +162,11 @@ class experiment(object):
             return;
 
         elif centric=='allo-ego':
+            print "Ego trial (1/2):"
             tr_successes_e, te_successes_e, st_e = self.run_single_train_sess(\
                     self.nsamples, mna, lr, training_epochs, nsize, eps_expl, \
                     opmzr, gsz, data_mode, 'egocentric',  s)
+            print "Allo trial (2/2):"
             tr_successes_a, te_successes_a, st_a = self.run_single_train_sess(\
                     self.nsamples, mna, lr, training_epochs, nsize, eps_expl, \
                     opmzr, gsz, data_mode, 'allocentric',  s)
@@ -253,7 +256,8 @@ class experiment(object):
         elif self.version=='v0-single' and gsz==(5,5):
             if mna==1:  num_states = 4
             if mna==2:  num_states = 10
-        else: raise Exception("version not implemented: num states unk")
+        else: 
+            raise Exception("version not implemented: num states unk")
         StateMat = np.zeros((4,training_epochs,num_states,2)) 
         # ^ Plot [action,] per epoch per state in train, test.
 

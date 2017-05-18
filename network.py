@@ -108,6 +108,10 @@ class network(object):
         elif 'fc1_size' in self.layer_types and 'fc2_size' in self.layer_types \
                 and 'fc3_size' in self.layer_types:
             self.structure = 'fc-fc-fc-fc'
+        elif 'fc1_size' in self.layer_types and 'fc2_size' in self.layer_types:
+            self.structure = 'fc-fc-fc'
+        elif 'fc1_size' in self.layer_types:
+            self.structure = 'fc-fc'
         else: raise Exception("Invalid network build requested.")
 
 
@@ -127,13 +131,24 @@ class network(object):
 
         self.fc_weights_1_shape = (self.flat_inp_sz, self.fc1_size)
         self.fc_weights_2_shape = (self.fc1_size, self.fc2_size)
-
         if self.structure=='cv-cv-fc-fc':
             self.fc_weights_3_shape =\
                 (self.cv2_size*np.prod(self.nconvs_2), self.fc3_size)
-        elif self.structure=='fc-fc-fc-fc':
+            self.out_weights_4_shape = (self.fc3_size, self.out_size)
+
+        if self.structure=='fc-fc-fc-fc':
+            self.fc_weights_1_shape = (self.flat_inp_sz, self.fc1_size)
+            self.fc_weights_2_shape = (self.fc1_size, self.fc2_size)
             self.fc_weights_3_shape = (self.fc2_size, self.fc3_size)
-        self.out_weights_4_shape = (self.fc3_size, self.out_size)
+            self.out_weights_4_shape = (self.fc3_size, self.out_size)
+        if self.structure=='fc-fc-fc':
+            self.fc_weights_1_shape = (self.flat_inp_sz, self.fc1_size)
+            self.fc_weights_2_shape = (self.fc1_size, self.fc2_size)
+            self.out_weights_4_shape = (self.fc2_size, self.out_size)
+        elif self.structure=='fc-fc':
+            self.fc_weights_1_shape = (self.flat_inp_sz, self.fc1_size)
+            self.out_weights_4_shape = (self.fc1_size, self.out_size)
+
 
 
         #   helper factors
@@ -354,12 +369,12 @@ class network(object):
         if 'cv1_size' in self.net_params:
             self.cv1_size = self.net_params['cv1_size']
         else: self.cv1_size = C1_NFILTERS
-        if 'fc1_size' in self.net_params:
-            self.fc1_size = self.net_params['fc1_size']
-        else:  self.fc1_size = FC_1_SIZE
         if 'cv2_size' in self.net_params:
             self.cv2_size = self.net_params['cv2_size']
         else:  self.cv2_size = C2_NFILTERS
+        if 'fc1_size' in self.net_params:
+            self.fc1_size = self.net_params['fc1_size']
+        else:  self.fc1_size = FC_1_SIZE
         if 'fc2_size' in self.net_params:
             self.fc2_size = self.net_params['fc2_size']
         else:  self.fc2_size = FC_2_SIZE
@@ -399,6 +414,7 @@ class network(object):
                 weights['cv1_b'] = tf.random_uniform(\
                     (self.cv1_size,), dtype=tf.float32, seed=self.seed,\
                     minval = 0.0, maxval = 2.0/self.c1_var_factor * VAR_SCALE)
+
                 weights['cv2'] = tf.random_uniform(\
                     self.conv_filter_2_shape, dtype=tf.float32, seed=self.seed, \
                     minval = 0.0, maxval = 2.0/self.c2_var_factor * VAR_SCALE)
@@ -406,7 +422,14 @@ class network(object):
                     (self.cv2_size,), dtype=tf.float32, seed=self.seed, \
                     minval = 0.0, maxval = 2.0/self.c2_var_factor * VAR_SCALE)
 
-            if self.structure=='fc-fc-fc-fc':
+                weights['fc3'] = tf.random_uniform(\
+                    self.fc_weights_3_shape, dtype=tf.float32, seed=self.seed,\
+                    minval=0.0, maxval=2.0/self.f3_var_factor * VAR_SCALE )
+                weights['fc3_b'] = tf.random_uniform(\
+                    (self.fc3_size,), dtype=tf.float32, seed=self.seed,\
+                    minval=0.0, maxval=2.0/self.f3_var_factor * VAR_SCALE )
+
+            if self.structure[:5]=='fc-fc':
                 ''' First Layers:FC inits '''
                 weights['fc1'] = tf.random_uniform(\
                     self.fc_weights_1_shape, dtype=tf.float32, seed=self.seed,\
@@ -414,20 +437,26 @@ class network(object):
                 weights['fc1_b'] = tf.random_uniform(\
                     (self.fc1_size,), dtype=tf.float32, seed=self.seed,\
                     minval=0.0, maxval=2.0/self.f1_var_factor * VAR_SCALE )
+
+            if self.structure[:8]=='fc-fc-fc':
                 weights['fc2'] = tf.random_uniform(\
                     self.fc_weights_2_shape, dtype=tf.float32, seed=self.seed,\
                     minval=0.0, maxval=2.0/self.f2_var_factor * VAR_SCALE )
                 weights['fc2_b'] = tf.random_uniform(\
                     (self.fc2_size,), dtype=tf.float32, seed=self.seed,\
                     minval=0.0, maxval=2.0/self.f2_var_factor * VAR_SCALE )
+            else: 
+                self.fc3_size = self.fc2_size
 
-            ''' Last Layers:FC,out inits '''
-            weights['fc3'] = tf.random_uniform(\
-                self.fc_weights_3_shape, dtype=tf.float32, seed=self.seed,\
-                minval=0.0, maxval=2.0/self.f3_var_factor * VAR_SCALE )
-            weights['fc3_b'] = tf.random_uniform(\
-                (self.fc3_size,), dtype=tf.float32, seed=self.seed,\
-                minval=0.0, maxval=2.0/self.f3_var_factor * VAR_SCALE )
+            if 'fc-fc-fc-fc' in self.structure:
+                weights['fc3'] = tf.random_uniform(\
+                    self.fc_weights_3_shape, dtype=tf.float32, seed=self.seed,\
+                    minval=0.0, maxval=2.0/self.f3_var_factor * VAR_SCALE )
+                weights['fc3_b'] = tf.random_uniform(\
+                    (self.fc3_size,), dtype=tf.float32, seed=self.seed,\
+                    minval=0.0, maxval=2.0/self.f3_var_factor * VAR_SCALE )
+            else: 
+                self.fc4_size = self.fc3_size
 
             weights['out4']= tf.random_uniform(\
                 self.out_weights_4_shape, dtype=tf.float32, seed=self.seed,\
