@@ -316,7 +316,8 @@ class reinforcement(object):
                         ' averaged:  '
                 for ls in np.mean(np.array(last_n_test_losses),axis=0):
                     s += str('%1.2e' % ls)+'  '
-                s += '\tover all states:'+np.mean(np.array(last_n_test_losses))
+                s += '\tover all states: '
+                s += str(np.mean(np.array(last_n_test_losses)))
                 print(s)
 
                 if not params['printing']: 

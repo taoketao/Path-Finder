@@ -58,7 +58,7 @@ class experiment(object):
             self.nsamples = 1
             self.curseeds = list(range(self.seed,self.seed+self.nsamples))
             self.no_save = False
-            self.dest = './storage/5-19/2-away-5/'
+            self.dest = './storage/5-19/loc-2-away-0/'
             self.logfile = open(os.path.join(self.dest+'logfile.txt'), 'w+',\
                     encoding="utf-8")
             self.run_exp('allo-ego')
