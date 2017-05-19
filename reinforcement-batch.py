@@ -6,9 +6,9 @@ import sys, time
 import tensorflow as tf
 from socket import gethostname
 import numpy as np
-import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 from environment3 import *
 from network import *
 from scipy.sparse import coo_matrix
@@ -183,6 +183,7 @@ class reinforcement(object):
         self.data_mode = data_mode
         self.seed = seed
         net_params=None
+        if not 'rotation' in override: override['rotation']=False
         if 'netsize' in override:
             o = override['netsize']
             if not len(o)%2==0: raise Exception("Invalid network structure init.")
@@ -200,7 +201,8 @@ class reinforcement(object):
         # If load_weights_path==None, then initialize weights fresh&random.
         self.Net = network(self.env, 'NEURAL', override=override, \
                 load_weights_path=load_weights_path, _game_version=\
-                pdgm, net_params=net_params, _optimizer_type=opt, seed=seed)
+                pdgm, net_params=net_params, _optimizer_type=opt, seed=seed,\
+                _batch_off=False) # batch mode!
 
         if not override==None:
             self.max_num_actions = override['max_num_actions'] if \
@@ -231,9 +233,9 @@ class reinforcement(object):
         if not 'saving' in params:
             params['saving'] = { 'dest':None, 'freq':-1 }
         if not 'mode' in params:
-            params['present_mode'] = 'shuffled'
+            params['present_mode'] = 'ordered' # batch mode
         if not 'buffer_updates' in params:
-            params['buffer_updates'] = True
+            params['buffer_updates'] = False
         if not 'dropout-all' in params:
             params['dropout-all'] = True
         if not 'printing' in params:
@@ -282,29 +284,21 @@ class reinforcement(object):
                 next_states = np.random.permutation(self.init_states)
             else: raise Exception("No provided or default data mode.")
 
-            for episode,s0 in enumerate(next_states):
-                ret = self._do_one_episode(s0, epoch, 'train')
-                episode_results.put(epoch, episode,  \
-                      { 's0': s0.copy(), \
-                        'num_a': ret[0], \
-                        'success': ret[1], \
-                        'attempted_actions':ret[2], \
-                        'loss':ret[3], \
-                        'mode': 'train' })
-            ret_e = [None]*len(next_states)
-            for episode,s0 in enumerate(next_states):
-                ret = self._do_one_episode(s0, epoch, 'test')
-                episode_results.put(epoch, episode,  \
-                      { 's0': s0.copy(), \
-                        'num_a': ret[0], \
-                        'success': ret[1], \
-                        'attempted_actions':ret[2], \
-                        'loss':ret[3], \
-                        'mode': 'test' })
-                ret_e[episode] = ret[3]
+            rets = None
+            for __mode in ['train', 'test']:
+                rets = self._do_batch(next_states, epoch, __mode)
+                for ret in rets:
+                    episode_results.put(epoch, episode,  \
+                          { 's0': s0.copy(), \
+                            'num_a': ret[0], \
+                            'success': ret[1], \
+                            'attempted_actions':ret[2], \
+                            'loss':ret[3], \
+                            'mode': __mode })
+            ret_te = [r[3] for r in rets]
 
             if params['disp_avg_losses'] > 0:
-                last_n_test_losses.append(ret_e)
+                last_n_test_losses.append(ret_te)
                 if len(last_n_test_losses) > params['disp_avg_losses']:
                     last_n_test_losses.pop(0)
 
@@ -346,33 +340,37 @@ class reinforcement(object):
         else: raise Exception("Epsilon strategy not implemented")
 
 
-    def _do_one_episode(self, _s0, epoch, mode, buffer_me=False, printing=False):
+    def _do_batch(self, states, epoch, mode, buffer_me=False, printing=False):
         #print("EPISODE"); sys.exit()
         update_buff = []
-        num_a = 0
-        wasGoalReached = False
+        nstates = len(states)
+        num_a = [0]*nstates
+        wasGoalReached = [False]*nstates
         if printing: print('\n\n')
-        last_loss=-1.0
-        states_log = [_s0]
-        attempted_actions = -1*np.ones((self.max_num_actions,))
+        cur_states = states.copy()
+        attempted_actions = -1*np.ones((self.max_num_actions, nstates))
         losses = []
         for nth_action in range(self.max_num_actions):
-            s0 = states_log[-1]
-            if self.env.isGoalReached(s0): 
-               wasGoalReached=True
-               break
-            num_a+=1
-            Q0 = self.Net.getQVals([s0])
-            eps_chosen=False
-
+            for si,s0 in enumerate(cur_states):
+                if self.env.isGoalReached(s0): 
+                   wasGoalReached[si]=True
+                else:
+                    num_a[si] += 1
+            Q0_s = self.Net.getQVals(cur_states)
+            print(Q0_s)
+            sys.exit()
+            eps_chosen=[False]*nstates
+            
+            a0_est = np.empty( (nstates,) )
             # Choose action
             if mode=='train':
                 _epsilon = self._get_epsilon(epoch)
-                if np.random.rand() < _epsilon: 
+                eps_chs = np.random.rand(nstates)
+                for eps in np.where(eps_ch < _epsilon):
                     eps_chosen=True
-                    a0_est = np.random.choice(ACTIONS)
-                else:
-                    a0_est = np.argmax(Q0)
+                    a0_est[eps] = np.random.choice(ACTIONS)
+                for eps in np.where(eps_ch >= _epsilon):
+                    a0_est[eps] = np.argmax(Q0_s[eps])
             elif mode=='test':
                 a0_est = np.argmax(Q0)
 
@@ -408,3 +406,13 @@ class reinforcement(object):
 
     def save_weights(self, dest, prefix=''): self.Net.save_weights(dest, prefix)
     def displayQvals(self):pass
+
+
+if __name__=='__main__':
+    ovr = {'max_num_actions':2, 'learning_rate':1e-4, 'nepochs':1, \
+            'netsize':('fc',24), 'epsilon':0.5, 'loss_function':'huber',\
+            'gamesize':(7,7), 'optimizer_tup':('adam',1e-6)}
+    r = reinforcement('v2-a_fixedloc', 'egocentric', override=ovr, \
+            game_shape=(7,7), data_mode='ordered')
+    _ = r.run_session()
+    print("DONE")

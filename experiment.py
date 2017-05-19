@@ -58,7 +58,7 @@ class experiment(object):
             self.nsamples = 1
             self.curseeds = list(range(self.seed,self.seed+self.nsamples))
             self.no_save = False
-            self.dest = './storage/5-19/2-away-5/'
+            self.dest = './storage/5-19/2-away-11/'
             self.logfile = open(os.path.join(self.dest+'logfile.txt'), 'w+',\
                     encoding="utf-8")
             self.run_exp('allo-ego')
@@ -79,15 +79,15 @@ class experiment(object):
         '''------------------'''
         ''' Options to edit: '''
         '''------------------'''
-        _training_epochs = [3000]
+        _training_epochs = [20000]
         mnas = [2]
-        lrs = [1e-4]
-        epsilons = [0.7]#, 0.3, 'lindecay', '1/nx5', '1/nx15']
+        lrs = [3e-4]
+        epsilons = [0.5]
         #optimizers = [ ['sgd']]+ [['adam',i] for i in [1e-3,1e-4,1e-5,1e-6]] 
-        optimizers = [ ['adam', 1e-6] ] 
+        optimizers = [ ['adam',1e-5] ] 
+        #optimizers = [ ['sgd'] ] 
         network_sizes = [\
 #                ('fc',4),\
-#                ('fc',12),\
                 ('fc','fc',64,64),\
 #                ('fc','fc','fc',24,24,24),\
 #                ('cv','cv','fc',24,24,24),\
@@ -144,7 +144,7 @@ class experiment(object):
         print(("\t max number of actions: "+str(mna)))
         print(("\t learning rate: "+str(lr)))
         print(("\t num training epochs: "+str(training_epochs)))
-        print(("\t samplesl "+str(self.nsamples)))
+        print(("\t samples: "+str(self.nsamples)))
         print(("\t frame: "+centric))
         print(("\t data mode: "+str(data_mode)))
         print(("\t exploration epsilon: "+str(eps_expl)))
