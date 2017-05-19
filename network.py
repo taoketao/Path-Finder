@@ -8,7 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')
-from environment2 import *
+from environment3 import *
 from save_as_plot import *
 
 ''' system/os constants '''
@@ -255,7 +255,6 @@ class network(object):
         ''' Layer Construction (ie forward pass construction) '''
         self.input_layer = tf.placeholder(tf.float32, [None,                  \
                 self.gridsz[XDIM],self.gridsz[YDIM],N_LAYERS], 'input');    \
-        print(self.input_layer.get_shape())
         self.inp_l = tf.contrib.layers.flatten(self.input_layer)
         #self.l1 = tf.matmul(self.inp_l, self.fc_weights_1, name='fc1')\
         self.l1 = tf.matmul(self.inp_l, self.fc_weights_1, name='fc1')\

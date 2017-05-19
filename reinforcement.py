@@ -111,45 +111,53 @@ class reinforcement(object):
         v1-all:  not yet implemented.
 
         v0-a_fixedloc: extra simple - zeros.  A at center.
+
+        v2-a_fixedloc:  A at center, all variations where G is within two
+                steps of A in a (7x7) world. 7x7: bc agent doesn't have 
+                'which # action is this' identifiability.
         ...
     '''
-    def __init__(self, which_game, frame, game_shape=(5,5), override=None,
+    def __init__(self, which_game, frame, game_shape, override=None,
                  load_weights_path=None, data_mode=None, seed=None):
         np.random.seed(seed)
         self.env = environment_handler3(game_shape, frame, world_fill='roll')
         self.sg = state_generator(game_shape)
         self.sg.ingest_component_prefabs(COMPONENTS_LOC)
        
-        self.D1_ocorner = self.sg.generate_all_states_fixedCenter(\
-                'v1', self.env, oriented=True)
-        self.D1_corner = self.sg.generate_all_states_fixedCenter(\
-                'v1', self.env)
-        self.D1_micro = self.sg.generate_all_states_micro('v1',self.env)
+        if 'v1' in which_game or 'v0' in which_game:
+            self.D1_ocorner = self.sg.generate_all_states_fixedCenter(\
+                    'v1', self.env, oriented=True)
+            self.D1_corner = self.sg.generate_all_states_fixedCenter(\
+                    'v1', self.env)
+            self.D1_micro = self.sg.generate_all_states_micro('v1',self.env)
+            pdgm, init_states = {
+                'v1-single':    ('v1', [ self.D1_corner[2]]),
+                'v1-oriented':  ('v1', self.D1_ocorner),
+                'v1-micro':    ('v1', self.D1_micro),
+                'v1-corner':    ('v1', self.D1_corner),
+                'v1-a_fixedloc':  ('v1', [self.D1_corner[3],  self.D1_corner[8],\
+                                  self.D1_corner[15], self.D1_corner[20] ]),
 
-        pdgm, init_states = {
-            'v1-single':    ('V1', [ self.D1_corner[2]]),
-            'v1-oriented':  ('V1', self.D1_ocorner),
-            'v1-micro':    ('V1', self.D1_micro),
-            'v1-corner':    ('V1', self.D1_corner),
-            'v1-a_fixedloc':  ('V1', [self.D1_corner[3],  self.D1_corner[8],\
-                              self.D1_corner[15], self.D1_corner[20] ]),
+                'v1-micro_g_fixedloc': ('v1', self.D1_micro+[self.D1_corner[3], \
+                    self.D1_corner[8], self.D1_corner[15], self.D1_corner[20] ]),
+                'v1-micro_a_fixedloc': ('v1', self.D1_micro+[self.D1_corner[3], \
+                    self.D1_corner[8], self.D1_corner[15], self.D1_corner[20] ]),
+                
+                # v *** v
+                'v0-a_fixedloc':  ('v0', [self.env.getStateFromFile(\
+                                './data_files/states/3x3-basic-G'+f, 'except')\
+                                for f in ['U.txt', 'R.txt', 'D.txt', 'L.txt']]),
+                # ^ *** ^
 
-            'v1-micro_g_fixedloc': ('V1', self.D1_micro+[self.D1_corner[3], \
-                self.D1_corner[8], self.D1_corner[15], self.D1_corner[20] ]),
-            'v1-micro_a_fixedloc': ('V1', self.D1_micro+[self.D1_corner[3], \
-                self.D1_corner[8], self.D1_corner[15], self.D1_corner[20] ]),
-            
-            # v *** v
-            'v0-a_fixedloc':  ('V0', [self.env.getStateFromFile(\
-                            './data_files/states/3x3-basic-G'+f, 'except')\
-                            for f in ['U.txt', 'R.txt', 'D.txt', 'L.txt']]),
-            # ^ *** ^
-
-            'v0-single':    ('V0', [self.env.getStateFromFile(\
-                            './data_files/states/3x3-basic-AU.txt', 'except')]),
-            'v1-all':       'stub, not implemented yet!',
-
+                'v0-single':    ('v0', [self.env.getStateFromFile(\
+                                './data_files/states/3x3-basic-AU.txt', 'except')]),
+                'v1-all':       'stub, not implemented yet!',
             }[which_game]
+
+        if 'v2' in which_game:
+            init_states = self.sg.generate_all_states_upto_2away('v2',self.env)
+            pdgm = 'v2'
+
         if 'printing'in override and override['printing']==True:
             for i,s in enumerate(init_states):
                 print(("State",i)); self.env.displayGameState(s, mode=2); 
@@ -177,7 +185,7 @@ class reinforcement(object):
         # If load_weights_path==None, then initialize weights fresh&random.
         self.Net = network(self.env, 'NEURAL', override=override, \
                 load_weights_path=load_weights_path, _game_version=\
-                'v0', net_params=net_params, _optimizer_type=opt, seed=seed)
+                pdgm, net_params=net_params, _optimizer_type=opt, seed=seed)
 
         if not override==None:
             self.max_num_actions = override['max_num_actions'] if \
@@ -201,8 +209,8 @@ class reinforcement(object):
                 INVALID_REWARD, False, valid_action_flag
 
     def dev_checks(self):
-        if not self.which_paradigm in ['V0','V1']:
-           raise Exception("Reinforcement session is only implemented for V0,V1.")
+        if not self.which_paradigm in ['v0','v1','v2']:
+           raise Exception("Reinforcement session is only implemented for v0,v1,v2.")
 
     def _populate_default_params(self, params):
         if not 'saving' in params:
@@ -280,12 +288,12 @@ class reinforcement(object):
                 if len(last_n_test_losses)>5: last_n_test_losses.pop(0)
 
             if epoch%250==0: 
-                print(("Epoch #"+str(epoch)+"/"+str(self.training_epochs)), end=' ')
-                print('\tlast '+str(params['disp_avg_losses'])+' losses',\
-                        'averaged:', end=' ') 
+                s = "Epoch #"+str(epoch)+"/"+str(self.training_epochs)
+                s += '\tlast '+str(params['disp_avg_losses'])+' losses'+\
+                        ' averaged:  '
                 for ls in np.mean(np.array(last_n_test_losses),axis=0):
-                    print('%1.2e' % ls, end=' ')
-                print('')
+                    s += str('%1.2e' % ls)+'  '
+                print(s)
                 if not params['printing']: 
                     continue
                 if epoch>0:

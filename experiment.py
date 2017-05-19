@@ -9,6 +9,7 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from io import open
 
 from save_as_plot import *
 from reinforcement import reinforcement
@@ -53,12 +54,13 @@ class experiment(object):
         self.iterator = 0;
         self.seed=42
         if mode=='ego-allo-test':
-            self.version='v0-a_fixedloc'
-            self.nsamples = 20
+            self.version='v2-a_fixedloc'
+            self.nsamples = 1
             self.curseeds = list(range(self.seed,self.seed+self.nsamples))
             self.no_save = False
-            self.dest = './storage/5-18/stat-test-2/'
-            self.logfile = open(os.path.join(self.dest+'logfile.txt'), 'w')
+            self.dest = './storage/5-18/2-away/'
+            self.logfile = open(os.path.join(self.dest+'logfile.txt'), 'w',\
+                    encoding="utf-8")
             self.run_exp('allo-ego')
         self.logfile.close()
         #call(["open", self.dest])
@@ -77,26 +79,21 @@ class experiment(object):
         '''------------------'''
         ''' Options to edit: '''
         '''------------------'''
-        _training_epochs = [10000]
-        mnas = [1]
+        _training_epochs = [4000]
+        mnas = [2]
         lrs = [1e-3]
         epsilons = [0.7]#, 0.3, 'lindecay', '1/nx5', '1/nx15']
         #optimizers = [ ['sgd']]+ [['adam',i] for i in [1e-3,1e-4,1e-5,1e-6]] 
         optimizers = [ ['adam', 1e-6] ] 
         network_sizes = [\
-                ('fc',4),\
-                ('fc',36),\
+#                ('fc',4),\
+#                ('fc',12),\
                 ('fc','fc',36,36),\
-                ('fc',24),\
-                ('fc','fc',24,24),\
-                ('cv','cv','fc',24,24,24),\
-                ('cv','cv','fc',16,16,16),\
-                ('fc','fc','fc',24,24,24),\
-                ('fc','fc','fc',16,16,16),\
+#                ('fc',24),\
                 ]
         data_modes = ['shuffled']#, 'ordered']
-        gamesizes = [(5,5)]
-        smoothing = 50 # <- Adjust for plotting: higher=smoother
+        gamesizes = [(7,7)]
+        smoothing = 25 # <- Adjust for plotting: higher=smoother
         '''--------------------------'''
         ''' end of recommended edits '''
         '''--------------------------'''
@@ -187,6 +184,7 @@ class experiment(object):
             ovr = {'max_num_actions': mna, 'learning_rate':lr, \
                     'nepochs': training_epochs, 'netsize':nsize, \
                     'epsilon':eps_expl, 'loss_function':'square', \
+                    'gamesize':gsz, \
                     'optimizer_tup':opmzr, 'rotation':False };
             r = reinforcement(self.version, centric, override=ovr, \
                     game_shape=gsz, data_mode=data_mode, \
@@ -201,8 +199,9 @@ class experiment(object):
             test_results = results.get('test', 'successes')
             Te_Successes.append(test_results)
             if training_epochs > 30 and len(s)>0:
-                self.logfile.write(s+' sample #'+str(ri)+\
-                    ' last 30 test accs: '+'\n'+str(test_results[-30:])+'\n')
+                s_ = s+' sample #'+str(ri)+' last 30 test accs: '+'\n'+\
+                        str(test_results[-30:])+'\n'
+                self.logfile.write(unicode(s_))
             if states==None: 
                 states = results.get('states')
         

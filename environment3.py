@@ -215,14 +215,14 @@ class state(object):
         if not self.sparse:
             for y in range(self.gridsz[1]):
                 for i in range(NUM_LAYERS):
-                    print(self.grid[:,y,i], '\t', end=' ')
+                    print(self.grid[:,y,i], '\t',)
                 print('')
         else:
-            print('{', end=' ')
+            print('{',)
             for i in range(NUM_LAYERS):
                 if len(self.grid[i].data)==0: continue
-                print(str(i)+':', self.grid[i].row, self.grid[i].col, end=' ')
-                print(self.grid[i].data,',', end=' ')
+                print(str(i)+':', self.grid[i].row, self.grid[i].col,)
+                print(self.grid[i].data,',',)
             print('}')
 
 
@@ -233,9 +233,8 @@ class environment_handler3(object):
     def __init__(self, gridsize, action_mode, \
             default_agent_dir=NORTH, default_world_dir=NORTH,\
             world_fill='placeholder'):
-        if gridsize:
-            self.gridsz = gridsize;
-            assert(gridsize[0]==gridsize[1])
+        self.gridsz = gridsize;
+        assert(gridsize[0]==gridsize[1])
         if 'egocentric'==action_mode and not world_fill in ['O','I','roll']:
             raise Exception("Please provide a valid fill for this environment"\
                             +"that facilitates map shifting.")
@@ -615,6 +614,9 @@ class state_generator(object):
     def generate_all_states_micro(self, version, env):
         if version=='v1': 
             return self._generate_micro('default_center', env)
+    def generate_all_states_upto_2away(self, version, env):
+        if version=='v2': 
+            return self._generate_v2('default_center', env)
 
     def generate_all_states_floatCenter(self, version):pass
     def generate_N_states_fixedCenter(self, version, replacement=False):pass
@@ -765,6 +767,19 @@ class state_generator(object):
                         'nextto', (x,y), (0,1,1), 'param')
                 states.append(env.post_state(sp))
         return states
+    def _generate_v2(self, rootloc, env, Dir=None):
+        if Dir==None:
+            Dir = './data_files/states/'
+        if not rootloc=='default_center':
+            raise Exception("rootloc not yet implemented : "+str(rootloc))
+        if not env.gridsz==(7,7):
+            raise Exception("env gridsz not yet implemented : "+str(env.gridsz))
+        return [env.getStateFromFile(os.path.join(Dir,fn), 'except') \
+                for fn in os.listdir(Dir) if '7x7-2away-A' in fn]
+
+
+
+
 
 def test_script1():
     # this script tests the ability to generate all game states for vers1.
@@ -782,8 +797,8 @@ def test_script1():
         env.postOptimalNumSteps(s)
     print("Min number of steps to solve above game: ", env.getOptimalNumSteps(random.choice(X)))
     print("Number of states generated:", len(X))
-    print("Above are all the possible valid game states that have a 3x3", end=' ')
-    print(" grid in a fixed location in which the agent is directly next", end=' ')
+    print("Above are all the possible valid game states that have a 3x3",)
+    print(" grid in a fixed location in which the agent is directly next",)
     print(" to the goal (in any direction); that is, the first possible task.")
     print('--------------------------------------------------------')
 
@@ -799,8 +814,8 @@ def test_script2():
         env.postOptimalNumSteps(s)
     print("Min number of steps to solve above game: ", env.getOptimalNumSteps(random.choice(X)))
     print("Number of states generated:", len(X))
-    print("Above are all the possible valid game states that have a 3x3", end=' ')
-    print(" grid in a fixed location in which the agent is directly next", end=' ')
+    print("Above are all the possible valid game states that have a 3x3",)
+    print(" grid in a fixed location in which the agent is directly next",)
     print(" to the goal (in any direction); that is, the first possible task.")
     print('--------------------------------------------------------')
 
@@ -835,7 +850,7 @@ def test_script3():
 #        s3 = env.performAction(s2, 'u',0);  print "\naction: u, action success:", \
 #            env.checkIfValidAction(s2, 'u');  env.displayGameState(s3);
         print('--------------------------------------------------------')
-    print("Above is a test script that demonstrates that the state-environment-actor ", end=' ')
+    print("Above is a test script that demonstrates that the state-environment-actor ")
     print("situation is coherent and functional.")
 
 
@@ -850,10 +865,25 @@ def test_script4():
             env.displayGameState(s1, exception=True)
             s0=s1
 
+def test_script5():
+    # this script tests new 2-away maps.
+    Dir = './data_files/states/'
+    for mode in ['egocentric', 'allocentric']:
+        env = environment_handler3((7,7), mode, world_fill='roll')
+        states = [env.getStateFromFile(os.path.join(Dir,fn), 'except') \
+                for fn in os.listdir(Dir) if '7x7-2away-A' in fn]
+        print states
+        for s in states:
+            env.displayGameState(s, exception=True)
+            print('')
+        sys.exit()
+
+
 
 if __name__=='__main__':
     #test_script1()
     #test_script2()
     #test_script3()
-    test_script4()
+    #test_script4()
+    test_script5()
     print("DONE")

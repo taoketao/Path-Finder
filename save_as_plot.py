@@ -206,6 +206,34 @@ def save_as_Qplot3(mat, save_to_loc, trialinfo='[none provided]'):
 
 def _dist(x,y): return abs(x[0]-y[0])+abs(x[1]-y[1])
 
+def _make_str2(states, gridsz, trte, c1, c2):
+    if not trte==-1: raise Exception('not implemented yet')
+    s='\nStates:\n'
+    for which in range(len(c1)//3):
+        s += '\n'
+        for i in range(gridsz[0]):
+            for j in range(gridsz[1]):
+                S = states[which*2]
+                if (i==S[1] and j==S[0]):   s += 'A'
+                elif (i==S[3] and j==S[2]): s += 'G'
+                else: s += '-'
+            s+='      '
+            for j in range(gridsz[1]):
+                S = states[which*2+1]
+                if (i==S[1] and j==S[0]):   s += 'A'
+                elif (i==S[3] and j==S[2]): s += 'G'
+                else: s += '-'
+            s+='      '
+            for j in range(gridsz[1]):
+                S = states[which*2+2]
+                if (i==S[1] and j==S[0]):   s += 'A'
+                elif (i==S[3] and j==S[2]): s += 'G'
+                else: s += '-'
+            if not i==gridsz[0]-1:
+                s += '\n'
+        s += '\n'
+    return s
+
 def _make_str(s_id, gridsz, trte, debug=False):
     if trte==0: s ='train\n'
     if trte==1: s ='test \n'
@@ -255,8 +283,14 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
     plt.gca().set_ylim([-0.1,1.1])
 
 
-    colors = ['blue','red','green','khaki']
-    darkcolors = ['dark'+c for c in colors]
+    if Tr.shape[1]==4:
+        colors = ['blue','red','green','khaki']
+        darkcolors = ['dark'+c for c in colors]
+    elif Tr.shape[1]==12:
+        colors = ['#ccccff','#9999ff','#6666ff','#3333ff','#0000cc','#000080',\
+            '#ccffff','#80ffff','#00ffff','#00cccc','#009999','#008080'] # blues
+        darkcolors = ['#ffcccc','#ff8080','#ff1a1a','#e60000','#cc0000','#990000',\
+            '#ffe6f0','#ffcce0','#ff99c2','#ff66a3','#ff1a75','#e6005c'] # reds
 
     for i in range(Tr.shape[1]):
         ax[(0,0)].plot(Tr[:,i], c=colors[i])
@@ -275,13 +309,23 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
     ax[(1,1)].set_xlabel("Testing")
     plt.gcf().set_size_inches(16,10)
     s2 = "Successes taken per state, per epoch."
-    if not states==None:
+    if not states==None and Tr.shape[1]==4:
         for sc in range(len(states)):
             s2 += '\n    '+colors[sc]+':\n'+ _make_str(states[sc],(5,5),-1)
+    if not states==None and Tr.shape[1]==12:
+        s2 += _make_str2(states,(7,7), -1, colors, darkcolors)
+
+    print(_make_str2(states,(7,7), -1, colors, darkcolors))
+
     if twoplots:
         s2 += '\nLight / orange: '+centric[0]
-        s2 += '\nDark / black: '+centric[1]
-    ax[(1,1)].text(1.2*Tr.shape[0],0, s2, fontsize=14, family='monospace')
+        if Tr.shape[1]==4:
+            s2 += '\nDark / black: '+centric[1]
+            fs = 14
+        elif Tr.shape[1]==12:
+            s2 += '\nblues / reds: '+centric[1]
+            fs = 10
+    ax[(1,1)].text(1.2*Tr.shape[0],0, s2, fontsize=fs, family='monospace')
     s.replace('-0','TMP').replace('_',':').replace('-','  ').replace('TMP','-0')
     plt.gcf().suptitle( s[s.find('v'):s.find(' successes')])
 
