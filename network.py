@@ -5,9 +5,9 @@ test framework for making sure the NN works - absent any reinforcement context
 import sys, time, random
 import tensorflow as tf
 import numpy as np
-import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 from environment3 import *
 from save_as_plot import *
 
