@@ -1,9 +1,10 @@
-'''                                                                            |
+'''
 Morgan Bryant, April 2017
 test framework for making sure the NN works - absent any reinforcement context
 '''
 import sys, time
 import tensorflow as tf
+from socket import gethostname
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
@@ -11,6 +12,7 @@ matplotlib.use('Agg')
 from environment3 import *
 from network import *
 from scipy.sparse import coo_matrix
+from subprocess import call
 
 ''' system/os constants '''
 COMPONENTS_LOC = "./data_files/components/"
@@ -54,15 +56,27 @@ class session_results(object):
         self._data[(epoch, episode, mode)] = D
 
     def get(self, p1, p2=None, p3=None): 
+        #print(p1,p2,p3)
         if p1 in ['train','test'] and p2==None and p3==None:
             return self._get(ALL,ALL,p1)
         if p1 in ['train','test'] and p2 in ['successes'] and p3==None:
-            return np.array( [[ 1.0 if x['success'] else 0.0 for x in X]\
-                        for X in self._get(ALL,ALL,p1)])
+            x__ = []
+            for X in self._get(ALL,ALL,p1):
+                x__.append(np.array([ 1.0 if x['success'] else 0.0 for x in X]))
+#            print(x__[-1].shape, len(x__))
+#            sys.exit()
+            return np.array( x__ )
         if p1 in ['train','test'] and p2 in ['nsteps'] and p3==None:
             return np.array( [[ x['num_a'] for x in X]\
                         for X in self._get(ALL,ALL,p1)])
         if p1 in ['train','test'] and p2 in ['losses'] and p3==None:
+            x__ = []
+            for X in self._get(ALL,ALL,p1):
+                x__.append(np.array([ x['loss'] for x in X]))
+#            print(x__[-1].shape, len(x__))
+#            sys.exit()
+            return np.array( x__ )
+
             return np.array( [[ x['loss'] for x in X]\
                         for X in self._get(ALL,ALL,p1)])
 
@@ -157,6 +171,7 @@ class reinforcement(object):
         if 'v2' in which_game:
             init_states = self.sg.generate_all_states_upto_2away('v2',self.env)
             pdgm = 'v2'
+            #print('\t',len(init_states))
 
         if 'printing'in override and override['printing']==True:
             for i,s in enumerate(init_states):
@@ -235,7 +250,12 @@ class reinforcement(object):
         self.dev_checks() # raises errors on stubs
         params = self._populate_default_params(params)
         init = tf.global_variables_initializer()
-        sess = tf.Session()
+        sess_config = tf.ConfigProto(inter_op_parallelism_threads=1,\
+                                     intra_op_parallelism_threads=1)
+        if gethostname=='PDP':
+            sess_config.gpu_options.allow_growth = True
+        sess = tf.Session(config=sess_config)
+
         self.Net.setSess(sess)
         sess.run(init)
         
@@ -245,9 +265,9 @@ class reinforcement(object):
         Buff=[]
         last_n_test_losses = []
 
-        with sess.as_default():
-          tf.set_random_seed(self.seed)
-          for epoch in range(self.training_epochs):
+        tf.set_random_seed(self.seed)
+        #print(self.training_epochs)
+        for epoch in range(self.training_epochs):
             # Save weights
             save_freq = params['saving']['freq']
             if save_freq>=0 and epoch % save_freq==0:
@@ -285,15 +305,20 @@ class reinforcement(object):
 
             if params['disp_avg_losses'] > 0:
                 last_n_test_losses.append(ret_e)
-                if len(last_n_test_losses)>5: last_n_test_losses.pop(0)
+                if len(last_n_test_losses) > params['disp_avg_losses']:
+                    last_n_test_losses.pop(0)
 
-            if epoch%250==0: 
+            if gethostname()=='PDP' and epoch==1000: 
+                call(['nvidia-smi'])
+            if (epoch%100==0 and epoch>0) or epoch==params['disp_avg_losses']: 
                 s = "Epoch #"+str(epoch)+"/"+str(self.training_epochs)
                 s += '\tlast '+str(params['disp_avg_losses'])+' losses'+\
                         ' averaged:  '
                 for ls in np.mean(np.array(last_n_test_losses),axis=0):
                     s += str('%1.2e' % ls)+'  '
+                s += '\tover all states:'+np.mean(np.array(last_n_test_losses))
                 print(s)
+
                 if not params['printing']: 
                     continue
                 if epoch>0:
@@ -320,7 +345,8 @@ class reinforcement(object):
         else: raise Exception("Epsilon strategy not implemented")
 
 
-    def _do_one_episode(self, _s0, epoch, mode, buffer_me=True, printing=False):
+    def _do_one_episode(self, _s0, epoch, mode, buffer_me=False, printing=False):
+        #print("EPISODE"); sys.exit()
         update_buff = []
         num_a = 0
         wasGoalReached = False
@@ -369,6 +395,8 @@ class reinforcement(object):
                         orig_states=[s0], targ_list=[targ]))
             elif mode=='test':
                 losses.append(self.Net.getLoss([Q0], [targ]))
+            else: raise Exception(mode)
+            #print(losses[-1])
            
             states_log.append(s1_valid)
 

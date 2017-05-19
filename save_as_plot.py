@@ -257,6 +257,8 @@ def _make_str(s_id, gridsz, trte, debug=False):
 
 def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
         tr2=None, te2=None):
+    if states==None:
+        raise Exception()
     #f, ax = plt.subplots(lX*2, lY*2, sharex=True)
     if centric in ['allocentric','egocentric']:
         twoplots = False
@@ -291,6 +293,7 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
             '#ccffff','#80ffff','#00ffff','#00cccc','#009999','#008080'] # blues
         darkcolors = ['#ffcccc','#ff8080','#ff1a1a','#e60000','#cc0000','#990000',\
             '#ffe6f0','#ffcce0','#ff99c2','#ff66a3','#ff1a75','#e6005c'] # reds
+    else: raise Exception(str(Tr.shape))
 
     for i in range(Tr.shape[1]):
         ax[(0,0)].plot(Tr[:,i], c=colors[i])

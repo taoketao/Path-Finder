@@ -774,8 +774,13 @@ class state_generator(object):
             raise Exception("rootloc not yet implemented : "+str(rootloc))
         if not env.gridsz==(7,7):
             raise Exception("env gridsz not yet implemented : "+str(env.gridsz))
+        files = [fn for fn in os.listdir(Dir) if '7x7-2away-A' in fn]
+        files.sort()
+#        for fn in files:
+#            print(fn[12:-4],)
+#        print('')
         return [env.getStateFromFile(os.path.join(Dir,fn), 'except') \
-                for fn in os.listdir(Dir) if '7x7-2away-A' in fn]
+                for fn in files]
 
 
 
@@ -872,11 +877,9 @@ def test_script5():
         env = environment_handler3((7,7), mode, world_fill='roll')
         states = [env.getStateFromFile(os.path.join(Dir,fn), 'except') \
                 for fn in os.listdir(Dir) if '7x7-2away-A' in fn]
-        print states
         for s in states:
             env.displayGameState(s, exception=True)
             print('')
-        sys.exit()
 
 
 

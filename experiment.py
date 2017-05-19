@@ -4,7 +4,7 @@ Test framework intended to run experiments.
 '''
 import sys, time, os
 from subprocess import call
-import tensorflow as tf
+from socket import gethostname
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
@@ -58,15 +58,15 @@ class experiment(object):
             self.nsamples = 1
             self.curseeds = list(range(self.seed,self.seed+self.nsamples))
             self.no_save = False
-            self.dest = './storage/5-18/2-away/'
-            self.logfile = open(os.path.join(self.dest+'logfile.txt'), 'w',\
+            self.dest = './storage/5-19/2-away-5/'
+            self.logfile = open(os.path.join(self.dest+'logfile.txt'), 'w+',\
                     encoding="utf-8")
             self.run_exp('allo-ego')
         self.logfile.close()
-        #call(["open", self.dest])
+        if not gethostname()=='PDP':
+            call(["open", self.dest])
     def getseed(self): 
         self.seed += 1
-        tf.set_random_seed(self.seed)
         return self.seed
 
 
@@ -79,16 +79,18 @@ class experiment(object):
         '''------------------'''
         ''' Options to edit: '''
         '''------------------'''
-        _training_epochs = [4000]
+        _training_epochs = [3000]
         mnas = [2]
-        lrs = [1e-3]
+        lrs = [1e-4]
         epsilons = [0.7]#, 0.3, 'lindecay', '1/nx5', '1/nx15']
         #optimizers = [ ['sgd']]+ [['adam',i] for i in [1e-3,1e-4,1e-5,1e-6]] 
         optimizers = [ ['adam', 1e-6] ] 
         network_sizes = [\
 #                ('fc',4),\
 #                ('fc',12),\
-                ('fc','fc',36,36),\
+                ('fc','fc',64,64),\
+#                ('fc','fc','fc',24,24,24),\
+#                ('cv','cv','fc',24,24,24),\
 #                ('fc',24),\
                 ]
         data_modes = ['shuffled']#, 'ordered']
@@ -168,6 +170,7 @@ class experiment(object):
             tr_successes_a, te_successes_a, st_a = self.run_single_train_sess(\
                     self.nsamples, mna, lr, training_epochs, nsize, eps_expl, \
                     opmzr, gsz, data_mode, 'allocentric',  s)
+            #print(tr_successes_e.shape, te_successes_e.shape, tr_successes_a.shape, te_successes_a.shape)
             assert(st_e==st_a)
             save_as_successes(s+'-successes', tr_successes_e, te_successes_e, \
                 st_e, smooth_factor, ['ego','allo'],
@@ -201,7 +204,8 @@ class experiment(object):
             if training_epochs > 30 and len(s)>0:
                 s_ = s+' sample #'+str(ri)+' last 30 test accs: '+'\n'+\
                         str(test_results[-30:])+'\n'
-                self.logfile.write(unicode(s_))
+                #self.logfile.write(unicode(s_))
+                self.logfile.write(s_)
             if states==None: 
                 states = results.get('states')
         
@@ -214,9 +218,9 @@ class experiment(object):
 
     def __deprecated__(self):
         '''print "readout results: "
-    print "\t avg tr, te losses:", list(np.mean(avg_losses[:,-1,:], axis=0))
-    print "\t avg tr, te nsteps:", list(np.mean(avg_steps[:,-1,:], axis=0))
-    print "\t avg tr, te reward:", list(np.mean(avg_reward[:,-1,:], axis=0))'''
+#    print "\t avg tr, te losses:", list(np.mean(avg_losses[:,-1,:], axis=0))
+#    print "\t avg tr, te nsteps:", list(np.mean(avg_steps[:,-1,:], axis=0))
+#    print "\t avg tr, te reward:", list(np.mean(avg_reward[:,-1,:], axis=0))'''
         arr = np.array((avg_losses, avg_steps, avg_reward))
         # arr shape: (2: losses & steps, nsamples, max_num_actions, 2: Tr & Te)
         self.MNA.append(arr)

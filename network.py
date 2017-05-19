@@ -551,6 +551,9 @@ class network(object):
             s0s = np.array([s.grid for s in orig_states])
 #            return self.sess.run([self.loss_op_updating, self.updates], feed_dict=\
 #                    {self.targ_var: targs, self.input_layer: s0s} )[0]
+#            print(self.sess.run([self.loss_op_updating, self.updates], feed_dict=\
+#                    {self.targ_var: targs, self.input_layer: s0s} ))
+#            sys.exit()
             return self.sess.run([self.loss_op_updating, self.updates], feed_dict=\
                     {self.targ_var: targs, self.input_layer: s0s} )[0]
         else:
