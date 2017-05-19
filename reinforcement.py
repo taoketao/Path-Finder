@@ -1,5 +1,5 @@
 '''
-Morgan Bryant, April 2017
+Morgan Bryant, April 2017 
 test framework for making sure the NN works - absent any reinforcement context
 '''
 import sys, time
