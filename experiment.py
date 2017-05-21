@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from io import open
 
 from save_as_plot import *
-from reinforcement import reinforcement
+from reinforcement_batch import reinforcement_b
 
 
 ''' [Helper] Constants '''
@@ -58,15 +58,16 @@ class experiment(object):
             self.nsamples = 1
             self.curseeds = list(range(self.seed,self.seed+self.nsamples))
             self.no_save = False
-<<<<<<< HEAD
-            self.dest = './storage/5-19/loc-2-away-0/'
-=======
-            self.dest = './storage/5-19/2-away-11/'
->>>>>>> ffa2e201d960ad4c22c38be86e0b7273aa8aae76
-            self.logfile = open(os.path.join(self.dest+'logfile.txt'), 'w+',\
-                    encoding="utf-8")
+            self.dest = './storage/5-19/2-away-24/'
+            if not os.path.exists(self.dest): os.makedirs(self.dest)
+            self.fin_logfile = open(os.path.join(self.dest+'fin_logfile.txt'), \
+                    'w+',encoding="utf-8")
+            self.tot_logfile = open(os.path.join(self.dest+'tot_logfile.txt'), \
+                    'w+',encoding="utf-8")
+            # fin, tot: final X vs whole thing
             self.run_exp('allo-ego')
-        self.logfile.close()
+        self.fin_logfile.close()
+        self.tot_logfile.close()
         if not gethostname()=='PDP':
             call(["open", self.dest])
     def getseed(self): 
@@ -83,18 +84,18 @@ class experiment(object):
         '''------------------'''
         ''' Options to edit: '''
         '''------------------'''
-        _training_epochs = [20000]
+        _training_epochs = [5000]
         mnas = [2]
-        lrs = [3e-4]
-        epsilons = [0.5]
+        lrs = [1e-3]
+        epsilons = ['lindecay']#,'decay_99']
         #optimizers = [ ['sgd']]+ [['adam',i] for i in [1e-3,1e-4,1e-5,1e-6]] 
-        optimizers = [ ['adam',1e-5] ] 
+        optimizers = [ ['adam',1e-7] ] 
         #optimizers = [ ['sgd'] ] 
         network_sizes = [\
 #                ('fc',4),\
-                ('fc','fc',64,64),\
-#                ('fc','fc','fc',24,24,24),\
-#                ('cv','cv','fc',24,24,24),\
+                ('fc',64),\
+#                ('fc','fc',32,32),\
+#                ('fc','fc','fc',64,64,32),\
 #                ('fc',24),\
                 ]
         data_modes = ['shuffled']#, 'ordered']
@@ -193,7 +194,7 @@ class experiment(object):
                     'epsilon':eps_expl, 'loss_function':'square', \
                     'gamesize':gsz, \
                     'optimizer_tup':opmzr, 'rotation':False };
-            r = reinforcement(self.version, centric, override=ovr, \
+            r = reinforcement_b(self.version, centric, override=ovr, \
                     game_shape=gsz, data_mode=data_mode, \
                     seed=self.curseeds[ri])
             print("Running sample # "+str(ri+1)+'/'+str(nsamples))
@@ -208,8 +209,10 @@ class experiment(object):
             if training_epochs > 30 and len(s)>0:
                 s_ = s+' sample #'+str(ri)+' last 30 test accs: '+'\n'+\
                         str(test_results[-30:])+'\n'
-                #self.logfile.write(unicode(s_))
-                self.logfile.write(s_)
+                self.fin_logfile.write(unicode(s_))
+                s_ = s+' sample #'+str(ri)+' last 30 test accs: '+'\n'+\
+                        str(test_results)+'\n'
+                self.tot_logfile.write(unicode(s_))
             if states==None: 
                 states = results.get('states')
         
