@@ -55,12 +55,12 @@ class experiment(object):
         self.seed=42
         if mode=='ego-allo-test':
             self.version='v2-a_fixedloc'
-            self.nsamples = 1
+            self.nsamples = 10
             self.curseeds = list(range(self.seed,self.seed+self.nsamples))
             self.no_save = False
-            self.dest = './storage/5-19/2-away-11/'
-            self.logfile = open(os.path.join(self.dest+'logfile.txt'), 'w+',\
-                    encoding="utf-8")
+            self.dest = './storage/5-19/2-away-13/'
+            self.log_str = os.path.join(get_time_str(self.dest)+'logfile.txt')
+            self.logfile = open(self.log_str, 'w+', encoding="utf-8")
             self.run_exp('allo-ego')
         self.logfile.close()
         if not gethostname()=='PDP':
@@ -81,16 +81,16 @@ class experiment(object):
         '''------------------'''
         _training_epochs = [20000]
         mnas = [2]
-        lrs = [3e-4]
+        lrs = [1e-4]
         epsilons = [0.5]
         #optimizers = [ ['sgd']]+ [['adam',i] for i in [1e-3,1e-4,1e-5,1e-6]] 
-        optimizers = [ ['adam',1e-5] ] 
+        optimizers = [ ['adam',1e-6] ] 
         #optimizers = [ ['sgd'] ] 
         network_sizes = [\
 #                ('fc',4),\
-                ('fc','fc',64,64),\
-#                ('fc','fc','fc',24,24,24),\
-#                ('cv','cv','fc',24,24,24),\
+                ('fc','fc',128,128),\
+#                ('fc','fc','fc',64,64,64),\
+                ('cv','cv','fc',64,64,64),\
 #                ('fc',24),\
                 ]
         data_modes = ['shuffled']#, 'ordered']
@@ -339,6 +339,7 @@ class experiment(object):
 #test_script('v1-corner', './storage/4-22-17-corner/')
 #test_script('v1-oriented', './storage/4-22-17-oriented-gamesize/')
 
-experiment(mode='ego-allo-test')
+if __name__=='__main__':
+    experiment(mode='ego-allo-test')
 
 print("Done.")

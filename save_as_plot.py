@@ -602,6 +602,7 @@ def save_final_losses_process(dest):
             'total trained networks.')
     print('All recorded values:')
     print("\n\nThe following are marginals over certain variables.\n")
+    if ndim==1: Margs = [ tuple([])]
     if ndim==2: Margs = [ (0,), (1,), tuple([])]
     if ndim==3: Margs = [ (0,), (1,), (2,), (0,2), (1,2), (0,1), tuple([]) ]
     if ndim==4: Margs = [ (0,), (1,), (2,), (3,), (0,1), (0,2), (1,2),\
