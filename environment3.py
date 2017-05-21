@@ -161,6 +161,10 @@ class state(object):
                 and s_p.a_loc == self.a_loc and s_p.g_loc == self.g_loc \
                 and np.array_equal(self.grid, s_p.grid) 
 
+    ''' Use this function for testing equality between states. '''
+    def equals2(self, s_p):
+        return np.array_equal(self.grid, s_p.grid) 
+
     ''' Rotates a state by 90*rot degrees.  Only supported currently for 
         square grids.'''
     def rotate(self, rot): 

@@ -1,4 +1,4 @@
-import sys
+import sys, os, time
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
@@ -10,6 +10,12 @@ ACTION_NAMES = { 0:"U", 1:'R', 2:"D", 3:'L' }
 UDIR = 0; RDIR = 1; DDIR = 2; LDIR = 3
 MAX_DISPLAY_EPOCHS = 100
 
+
+
+def get_time_str(path, prefix=''):
+    t=time.localtime()
+    return os.path.join(path, prefix+str(t[1])+'_'+str(t[2])+'_'+str(t[0])+\
+            '_'+str(t[3]).zfill(2)+str(t[4]).zfill(2))
 
 def smooth(arr, smoothing):
     if smoothing==1: return arr
@@ -318,16 +324,17 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
     if not states==None and Tr.shape[1]==12:
         s2 += _make_str2(states,(7,7), -1, colors, darkcolors)
 
-    print(_make_str2(states,(7,7), -1, colors, darkcolors))
 
     if twoplots:
-        s2 += '\nLight / orange: '+centric[0]
         if Tr.shape[1]==4:
+            s2 += '\nLight / orange: '+centric[0]
             s2 += '\nDark / black: '+centric[1]
             fs = 14
         elif Tr.shape[1]==12:
-            s2 += '\nblues / reds: '+centric[1]
+            s2 += '\nblues: '+centric[0]
+            s2 += '\nreds: '+centric[1]
             fs = 10
+    else: fs=10
     ax[(1,1)].text(1.2*Tr.shape[0],0, s2, fontsize=fs, family='monospace')
     s.replace('-0','TMP').replace('_',':').replace('-','  ').replace('TMP','-0')
     plt.gcf().suptitle( s[s.find('v'):s.find(' successes')])
@@ -496,34 +503,44 @@ def get_attributes(s_,i):
 
 def save_final_losses_process(dest): 
     #for now, only supports one file processing.
-    a = ' '; counter = 0.0;
-    data = []
+    datas = []
     tmp_data = [0,0,0,0]
     trials = []
-    with open(dest,'r') as DF:
-      while not len(a)==0:
-        a = DF.readline().strip(' ')
-        if len(a)==0: break
-        if 'test accs:' in a: 
-            trials.append(a)
-            continue
-        if a[:2] == '[[':
-            tmp_data = [0,0,0,0]
-            a = a[1:]
-        al = list(a)
-        tmp_data[0] += int(al[2]);
-        tmp_data[1] += int(al[6]);
-        tmp_data[2] += int(al[10]);
-        tmp_data[3] += int(al[14]);
-        counter += 1.0
-        if ']]' in a:
-            for i in range(4): tmp_data[i] /= counter
-            counter = 0.0
-            data.append(tmp_data)
-    if not len(trials)==len(data):
-        raise Exception("inconsistency: "+str(len(trials))+';'+str(len(data)))
-    n_entities = len(data)
-    D = np.array(data)
+    if type(dest)==list:
+        dests = dest
+    else:
+        dests = [dest]
+    for d in dests:
+        DF = open(d, 'r')
+        data = []
+        a = ' '; counter = 0.0;
+        while not len(a)==0:
+            a = DF.readline().strip(' ')
+            if not len(a)==0:
+                if 'test accs:' in a: 
+                    trials.append(a)
+                    continue
+                if a[:2] == '[[':
+                    tmp_data = [0,0,0,0]
+                    a = a[1:]
+                al = list(a)
+                tmp_data[0] += int(al[2]);
+                tmp_data[1] += int(al[6]);
+                tmp_data[2] += int(al[10]);
+                tmp_data[3] += int(al[14]);
+                counter += 1.0
+                if ']]' in a:
+                    for i in range(4): 
+                        tmp_data[i] /= counter
+                    counter = 0.0
+                    data.append(tmp_data)
+        DF.close()
+        datas.append(data)
+    D = np.array(datas)
+    print D.shape; sys.exit()
+    if not len(trials)==len(datas):
+        raise Exception("inconsistency: "+str(len(trials))+';'+str(len(datas)))
+    n_entities = len(datas)
     attributes = []
     for i in range(n_entities):
         attributes.append( get_attributes(trials[i], i) )
@@ -585,33 +602,49 @@ def save_final_losses_process(dest):
 #        print ''
 
     print('\n===============================\n')
-    print("VARIABLES:", WhichVary, ', taking on:')
+    print("VARIABLES: "+str(WhichVary)+' hyperparameters were varied, taking on:')
     for h in hyperparams:
         if h in WhichVary:
             for X in sorted(list(nversions[hp_map[h]])):
-                print('\t','{0[0]:<15}{0[1]:<15}'.format((h+':',str(X))))
-    print("while these were held constant:")
+                #print('\t'+'{0[0]:<15}{0[1]:<15}'.format((h+':'+str(X))))
+                print('\t'+h+':\t'+str(X))
+    print("CONSTANTS: these hyperparameters were held constant:")
     for h in hyperparams:
         if h not in WhichVary:
             #print '\t',h,':\t', 
-            print('\t','{0[0]:<15}{0[1]:<15}'.format((h+':',\
-                    str(tuple(nversions[hp_map[h]])[0]))))
+#            print('\t'+'{0[0]:<15}{0[1]:<15}'.format((h+':'+\
+#                    str(tuple(nversions[hp_map[h]])[0]))))
+            print('\t'+h+':\t'+str(tuple(nversions[hp_map[h]])[0]))
 #    nversions = []
 #    for _ in WhichVaryVals: print '\n',_
-    print('\nThis analysis studies', len(attributes)*attributes[-1]['nsamples'],\
-            'total trained networks.')
-    print('All recorded values:')
+    print('\nThis analysis studies '+str(len(attributes)*attributes[-1]\
+            ['nsamples'])+' total trained networks.')
+    if ndim==0: 
+        print('All recorded values:')
+        for m in (AvgAccsIsolated, MaxAccsIsolated, MinAccsIsolated):
+            print m
+        #Margs = [tuple([])]
+        return
     print("\n\nThe following are marginals over certain variables.\n")
+<<<<<<< HEAD
     if ndim==1: Margs = [ tuple([])]
     if ndim==2: Margs = [ (0,), (1,), tuple([])]
     if ndim==3: Margs = [ (0,), (1,), (2,), (0,2), (1,2), (0,1), tuple([]) ]
     if ndim==4: Margs = [ (0,), (1,), (2,), (3,), (0,1), (0,2), (1,2),\
          (0,3), (1,3), (2,3), (0,1,2), (0,1,3), (0,2,3), (1,2,3), tuple([])] # ALL
+=======
+    if ndim==1: Margs = [tuple([])]
+    elif ndim==2: Margs = [ (0,), (1,), tuple([])]
+    elif ndim==3: Margs = [ (0,), (1,), (2,), (0,2), (1,2), (0,1), tuple([]) ]
+#    if ndim==4: Margs = [ (0,), (1,), (2,), (3,), (0,1), (0,2), (1,2),\
+#         (0,3), (1,3), (2,3), (0,1,2), (0,1,3), (0,2,3), (1,2,3), tuple([])] # ALL
+>>>>>>> 4c3f67d997bdc3804d7e4fcc6fe106dc730e8b17
 #    if ndim==4: Margs = [ (1,), (2,), (3,), (1,2), (1,3), (2,3), (1,2,3), \
 #            tuple([])] # all except ego/allo distinction
 #    if ndim==4: Margs = [ (0,1,2), (0,1,3), (0,2,3), (1,2,3), tuple([])] # ALL
-    if ndim==4: Margs = [ (2,), (3,), (2,3), tuple([])] # don't marg over
+    elif ndim==4: Margs = [ (2,), (3,), (2,3), tuple([])] # don't marg over
         # erroneous LR
+    else: raise Exception(ndim)
 
     for margs in Margs:
         s = []
@@ -621,26 +654,28 @@ def save_final_losses_process(dest):
 
         #print 'present over', [WhichVary[m] for m in s] ,'&',
         if len(margs)==0: print("all responses:")
-        else: print('marginalize over', [WhichVary[m] for m in margs],':')
+        else: print('marginalize over'+str([WhichVary[m] for m in margs])+':')
         MEAN = np.mean(AvgAccsIsolated, axis=margs)
         MINS = np.min(MinAccsIsolated, axis=margs)
         MAXS = np.max(MaxAccsIsolated, axis=margs)
         if len(s)==1:
             for i in range(arr_shape[s[0]]):
-                print(WhichVaryVals[s[0]][i], '{0[0]:>8}'.format([\
-                        '\tavg']),'\t','{:1.3f}'.format(MEAN[i]),\
-                        '\tmin', '{:1.3f}'.format(MINS[i]),\
-                        '\tmax', '{:1.3f}'.format(MAXS[i]))
-#                print WhichVaryVals[s[0]][i], '\tavg', '{:1.3f}'.format(MEAN[i]),\
-#                        '\tmin', '{:1.3f}'.format(MINS[i]),\
-#                        '\tmax', '{:1.3f}'.format(MAXS[i])
+                print(WhichVaryVals[s[0]][i]+\
+                        '\tavg  '+'{:1.3f}'.format(MEAN[i])+\
+                        '\tmin  '+'{:1.3f}'.format(MINS[i])+\
+                        '\tmax  '+'{:1.3f}'.format(MAXS[i]))
         if len(s)==2:
           for i in range(arr_shape[s[0]]):
+#            print(str(WhichVaryVals[s[0]][i])+\
+#                '\tavg  '+'{:1.3f}'.format(np.mean(MEAN[i]))+\
+#                '\tmin  '+'{:1.3f}'.format(np.min(MINS[i]))+\
+#                '\tmax  '+'{:1.3f}'.format(np.max(MAXS[i])))
             for j in range(arr_shape[s[1]]):
-                print(WhichVaryVals[s[0]][i], WhichVaryVals[s[1]][j],\
-                        '\tavg', '{:1.3f}'.format(MEAN[i,j]),\
-                        '\tmin', '{:1.3f}'.format(MINS[i,j]),\
-                        '\tmax', '{:1.3f}'.format(MAXS[i,j]))
+                print(str(WhichVaryVals[s[0]][i])+'\t'+str(WhichVaryVals[s[1]][j])+\
+                    '\tavg  '+'{:1.3f}'.format(float(MEAN[i,j]))+\
+                    '\tmin  '+'{:1.3f}'.format(float(MINS[i,j]))+\
+                    '\tmax  '+'{:1.3f}'.format(float(MAXS[i,j])))
+
         if len(s)==3:
           for i in range(arr_shape[s[0]]):
            for j in range(arr_shape[s[1]]):
@@ -653,10 +688,25 @@ def save_final_losses_process(dest):
 
         print('') 
 
-
 if __name__=='__main__':
     if 'logfile'==sys.argv[1]:
-        save_final_losses_process(sys.argv[2])
+#        if len(sys.argv)>3:
+#            Z = np.load(sys.argv[2])
+#            Y = np.load(sys.argv[3])
+#            X = np.mean( [X, Y], axis=1)
+#            print X.shape, Y.shape, Z.shape
+        save_final_losses_process(sys.argv[2:])
+    elif 'state_actions'==sys.argv[1]:
+        X = np.mean(np.load(sys.argv[2]), axis=1)
+        print X.shape
+
+        _2away = [ (0,1), (1,0), (0,-1), (-1,0), (2,0), (1,1), (0,2), (1,-1), \
+                    (0,-2), (-1,-1), (-2,0), (-1,1) ]
+        print len(_2away)
+        states = [ (3,3,3+i,3+j) for i,j in _2away]
+        save_as_successes(get_time_str(sys.argv[2][:sys.argv[2].find('v2')])+'output_state_actions', 
+                X[0,:,:], X[1,:,:], states=states, \
+                smoothing=100, centric='egocentric',    tr2=None, te2=None)
     else:
         save_as_plot1(sys.argv[1:])
     '''
