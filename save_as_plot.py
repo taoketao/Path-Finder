@@ -124,7 +124,7 @@ def save_as_plot1(fns, lr=None, mna=None, nsamples=None, which='l', \
         plt.tight_layout(1.2)
         #plt.ylim(-0.1, 1.1)
         plt.ylim(bottom=0)
-        plt.savefig(fn[:-4])
+        plt.savefig(fn[:-4]+'.png')
         #plt.savefig(fn[:-4]+'.pdf', format='pdf')
         #plt.show()
 #        plt.savefig(fn[:-4])
@@ -169,7 +169,7 @@ def save_as_Qplot2(mat, save_to_loc):
     plt.plot()
     #plt.show()
 #    plt.savefig(save_to_loc+'.pdf', dpi=100, format='pdf')
-    plt.savefig(save_to_loc, dpi=100)
+    plt.savefig(save_to_loc+'.png', dpi=100)
     plt.close()
 
 def save_as_Qplot3(mat, save_to_loc, trialinfo='[none provided]'):
@@ -199,7 +199,7 @@ def save_as_Qplot3(mat, save_to_loc, trialinfo='[none provided]'):
     #plt.show()
 #    plt.savefig(save_to_loc+'.pdf', dpi=100, format='pdf')
     print(save_to_loc)
-    plt.savefig(save_to_loc, dpi=100)
+    plt.savefig(save_to_loc+'.png', dpi=100)
     plt.close()
 
 
@@ -215,7 +215,7 @@ def _dist(x,y): return abs(x[0]-y[0])+abs(x[1]-y[1])
 def _make_str2(states, gridsz, trte, c1, c2):
     if not trte==-1: raise Exception('not implemented yet')
     s='\nStates:\n'
-    for which in range(len(c1)//3):
+    for which in range(int(np.ceil(len(c1)/3.0))):
         s += '\n'
         for i in range(gridsz[0]):
             for j in range(gridsz[1]):
@@ -294,7 +294,7 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
     if Tr.shape[1]==4:
         colors = ['blue','red','green','khaki']
         darkcolors = ['dark'+c for c in colors]
-    elif Tr.shape[1]==12:
+    elif Tr.shape[1]==8 or Tr.shape[1]==12:
         colors = ['#ccccff','#9999ff','#6666ff','#3333ff','#0000cc','#000080',\
             '#ccffff','#80ffff','#00ffff','#00cccc','#009999','#008080'] # blues
         darkcolors = ['#ffcccc','#ff8080','#ff1a1a','#e60000','#cc0000','#990000',\
@@ -321,6 +321,8 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
     if not states==None and Tr.shape[1]==4:
         for sc in range(len(states)):
             s2 += '\n    '+colors[sc]+':\n'+ _make_str(states[sc],(5,5),-1)
+    if not states==None and Tr.shape[1]==8:
+        s2 += _make_str2(states,(7,7), -1, colors[:8], darkcolors[:8])
     if not states==None and Tr.shape[1]==12:
         s2 += _make_str2(states,(7,7), -1, colors, darkcolors)
 
@@ -330,7 +332,7 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
             s2 += '\nLight / orange: '+centric[0]
             s2 += '\nDark / black: '+centric[1]
             fs = 14
-        elif Tr.shape[1]==12:
+        elif Tr.shape[1]==12 or Tr.shape[1]==8:
             s2 += '\nblues: '+centric[0]
             s2 += '\nreds: '+centric[1]
             fs = 10
@@ -340,10 +342,8 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
     plt.gcf().suptitle( s[s.find('v'):s.find(' successes')])
 
     plt.plot()
-    #plt.show()
-    plt.savefig(s)
+    plt.savefig(s+'.png')
     plt.close()
-
 
 
 
@@ -411,7 +411,7 @@ def save_as_state_actions1(state_indices, state_mat, gridsz, dest):
 
     plt.plot()
     #plt.show()
-    plt.savefig(dest)
+    plt.savefig(dest+'.png')
     plt.close()
         
 
@@ -442,7 +442,7 @@ def save_as_plot(fns, lr, mna, nsamples=None):
         plt.tight_layout(1.2)
 #        plt.ylim(0, 4)
 #        plt.savefig(fn[:-4]+'.pdf', format='pdf')
-        plt.savefig(fn[:-4])
+        plt.savefig(fn[:-4]+'.png')
         plt.close()
 
     print("Success: last file stored at", fn[:-4])
@@ -537,7 +537,7 @@ def save_final_losses_process(dest):
         DF.close()
         datas.append(data)
     D = np.array(datas)
-    print D.shape; sys.exit()
+    print(D.shape); sys.exit()
     if not len(trials)==len(datas):
         raise Exception("inconsistency: "+str(len(trials))+';'+str(len(datas)))
     n_entities = len(datas)
@@ -622,23 +622,17 @@ def save_final_losses_process(dest):
     if ndim==0: 
         print('All recorded values:')
         for m in (AvgAccsIsolated, MaxAccsIsolated, MinAccsIsolated):
-            print m
+            print(m)
         #Margs = [tuple([])]
         return
     print("\n\nThe following are marginals over certain variables.\n")
-<<<<<<< HEAD
     if ndim==1: Margs = [ tuple([])]
     if ndim==2: Margs = [ (0,), (1,), tuple([])]
     if ndim==3: Margs = [ (0,), (1,), (2,), (0,2), (1,2), (0,1), tuple([]) ]
     if ndim==4: Margs = [ (0,), (1,), (2,), (3,), (0,1), (0,2), (1,2),\
          (0,3), (1,3), (2,3), (0,1,2), (0,1,3), (0,2,3), (1,2,3), tuple([])] # ALL
-=======
-    if ndim==1: Margs = [tuple([])]
-    elif ndim==2: Margs = [ (0,), (1,), tuple([])]
-    elif ndim==3: Margs = [ (0,), (1,), (2,), (0,2), (1,2), (0,1), tuple([]) ]
 #    if ndim==4: Margs = [ (0,), (1,), (2,), (3,), (0,1), (0,2), (1,2),\
 #         (0,3), (1,3), (2,3), (0,1,2), (0,1,3), (0,2,3), (1,2,3), tuple([])] # ALL
->>>>>>> 4c3f67d997bdc3804d7e4fcc6fe106dc730e8b17
 #    if ndim==4: Margs = [ (1,), (2,), (3,), (1,2), (1,3), (2,3), (1,2,3), \
 #            tuple([])] # all except ego/allo distinction
 #    if ndim==4: Margs = [ (0,1,2), (0,1,3), (0,2,3), (1,2,3), tuple([])] # ALL
@@ -698,11 +692,11 @@ if __name__=='__main__':
         save_final_losses_process(sys.argv[2:])
     elif 'state_actions'==sys.argv[1]:
         X = np.mean(np.load(sys.argv[2]), axis=1)
-        print X.shape
+        print(X.shape)
 
         _2away = [ (0,1), (1,0), (0,-1), (-1,0), (2,0), (1,1), (0,2), (1,-1), \
                     (0,-2), (-1,-1), (-2,0), (-1,1) ]
-        print len(_2away)
+        print(len(_2away))
         states = [ (3,3,3+i,3+j) for i,j in _2away]
         save_as_successes(get_time_str(sys.argv[2][:sys.argv[2].find('v2')])+'output_state_actions', 
                 X[0,:,:], X[1,:,:], states=states, \

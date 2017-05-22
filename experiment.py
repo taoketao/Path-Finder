@@ -54,27 +54,17 @@ class experiment(object):
         self.iterator = 0;
         self.seed=42
         if mode=='ego-allo-test':
-            self.version='v2-a_fixedloc'
-            self.nsamples = 10
+            self.dest = './storage/5-21/14/'
+            if not os.path.exists(self.dest): os.makedirs(self.dest)
+            self.nsamples = 1
             self.curseeds = list(range(self.seed,self.seed+self.nsamples))
             self.no_save = False
-<<<<<<< HEAD
-            self.dest = './storage/5-19/2-away-13/'
-            self.log_str = os.path.join(get_time_str(self.dest)+'logfile.txt')
-            self.fin_logfile = open(os.path.join(self.dest+'fin_logfile.txt'), \
+            self.fin_logfile = open(get_time_str(self.dest,'fin_logfile.txt'), \
                     'w+',encoding="utf-8")
-            self.tot_logfile = open(os.path.join(self.dest+'tot_logfile.txt'), \
+            self.tot_logfile = open(get_time_str(self.dest,'tot_logfile.txt'), \
                     'w+',encoding="utf-8")
-=======
-            self.dest = './storage/5-19/2-away-24/'
-            if not os.path.exists(self.dest): os.makedirs(self.dest)
-            self.fin_logfile = open(os.path.join(self.dest+'fin_logfile.txt'), \
-                    'w+',encoding="utf-8")
-            self.tot_logfile = open(os.path.join(self.dest+'tot_logfile.txt'), \
-                    'w+',encoding="utf-8")
-            # fin, tot: final X vs whole thing
->>>>>>> 4c3f67d997bdc3804d7e4fcc6fe106dc730e8b17
             self.run_exp('allo-ego')
+
         self.fin_logfile.close()
         self.tot_logfile.close()
         if not gethostname()=='PDP':
@@ -93,59 +83,46 @@ class experiment(object):
         '''------------------'''
         ''' Options to edit: '''
         '''------------------'''
-        _training_epochs = [5000]
+        _training_epochs = [10000]
         mnas = [2]
-<<<<<<< HEAD
-        lrs = [1e-4]
-        epsilons = [0.5]
-        #optimizers = [ ['sgd']]+ [['adam',i] for i in [1e-3,1e-4,1e-5,1e-6]] 
-        optimizers = [ ['adam',1e-6] ] 
-        #optimizers = [ ['sgd'] ] 
-        network_sizes = [\
-#                ('fc',4),\
-                ('fc','fc',128,128),\
-#                ('fc','fc','fc',64,64,64),\
-                ('cv','cv','fc',64,64,64),\
-=======
-        lrs = [1e-3]
-        epsilons = ['lindecay']#,'decay_99']
-        #optimizers = [ ['sgd']]+ [['adam',i] for i in [1e-3,1e-4,1e-5,1e-6]] 
+        gameversions = [ 'v0-a_fixedloc','v2-a_fixedloc_leq','v2-a_fixedloc_eq' ]
+        #gameversions = [ 'v0-a_fixedloc' ]
+        loss_fns = [ 'square', 'huber0.1', 'huber1', 'huber10' ]
+        curricula = [ None ]
+        lrs = [3e-4]
+        epsilons = ['decay_99']
         optimizers = [ ['adam',1e-7] ] 
-        #optimizers = [ ['sgd'] ] 
         network_sizes = [\
-#                ('fc',4),\
-                ('fc',64),\
-#                ('fc','fc',32,32),\
-#                ('fc','fc','fc',64,64,32),\
->>>>>>> 4c3f67d997bdc3804d7e4fcc6fe106dc730e8b17
-#                ('fc',24),\
+                ('fc','fc',64,32),\
                 ]
-        data_modes = ['shuffled']#, 'ordered']
-        gamesizes = [(7,7)]
+        data_modes = ['shuffled']
         smoothing = 25 # <- Adjust for plotting: higher=smoother
         '''--------------------------'''
         ''' end of recommended edits '''
         '''--------------------------'''
 
         self.tot_num_trials = len(_training_epochs)*len(mnas)*len(lrs)*\
-              len(epsilons)*len(optimizers)*len(network_sizes)*len(data_modes)
+              len(epsilons)*len(optimizers)*len(network_sizes)*len(data_modes)*\
+              len(gameversions)*len(curricula)*len(loss_fns)
         saved_time_str = get_time_str(self.dest)
         self.MNA = []
         for mna in mnas:
-          [[[[[[[ self.run_trial( epch, mna, lr, nsize, eps_expl, opmzr, gsz, \
-                centric, nsamples, dm, smoothing)\
+          [[[[[[[[[ self.run_trial( epch, mna, lr, nsize, eps_expl, opmzr, None, \
+                centric, nsamples, dm, gv, lossfn, curr, smoothing)\
                 for epch in _training_epochs ]\
                 #for mna in mnas ]\
                 for lr in lrs ]\
                 for nsize in network_sizes ]\
                 for eps_expl in epsilons ]\
                 for opmzr in optimizers ]\
-                for gsz in gamesizes]\
-                for dm in data_modes]
+                for dm in data_modes]\
+                for lossfn in loss_fns]\
+                for curr in curricula]\
+                for gv in gameversions]
           if self.no_save: continue#return
-          [[[[[[[ save_as_plot1(self.get_filesave_str(mna, lr, gsz, eps_expl,\
-                    opmzr, epch, nsize, data_mode, centric, 0) +\
-                    '-loss-graph.npy', \
+          [[[[[[[[[ save_as_plot1(self.get_filesave_str(mna, lr, None, eps_expl,\
+                    opmzr, epch, nsize, data_mode, centric, gv, lossfn, curr,\
+                    0) + '-loss-graph.npy', \
                     str(lr), str(mna), str(nsamples), which='l', \
                     div=N_EPS_PER_EPOCH, smoothing=smoothing)
                 for epch in _training_epochs ]\
@@ -154,8 +131,10 @@ class experiment(object):
                 for nsize in network_sizes ]\
                 for eps_expl in epsilons ]\
                 for opmzr in optimizers ]\
-                for gsz in gamesizes]\
-                for data_mode in data_modes]
+                for data_mode in data_modes]\
+                for lossfn in loss_fns]\
+                for curr in curricula]\
+                for gv in gameversions]
 
         print('\n-----------------------------------------')
         print('-----------------------------------------\n')
@@ -165,39 +144,29 @@ class experiment(object):
 
 
     def run_trial(self, training_epochs, mna, lr, nsize, eps_expl, opmzr, gsz,\
-            centric, nsamples, data_mode, smooth_factor=50):
-        print(("\n **********  NEW TRIAL, number "+str(1+\
-            self.trial_counter)+'/'+str(self.tot_num_trials)))
-        print(("\t max number of actions: "+str(mna)))
-        print(("\t learning rate: "+str(lr)))
-        print(("\t num training epochs: "+str(training_epochs)))
-        print(("\t samples: "+str(self.nsamples)))
-        print(("\t frame: "+centric))
-        print(("\t data mode: "+str(data_mode)))
-        print(("\t exploration epsilon: "+str(eps_expl)))
-        print(("\t network shape: "+str(nsize)))
-        print(("\t game input shape: "+str(gsz)))
-        print(("\t optimizer: "+str(opmzr)))
-        self.trial_counter+=1
-        s=self.get_filesave_str(mna, lr, gsz, eps_expl, opmzr, \
-                training_epochs, nsize, data_mode, centric, 0)
+            centric, nsamples, data_mode, gameversion, loss_fn, curr, smooth_factor=50):
+        s=self.get_filesave_str(mna, lr, gsz, eps_expl, opmzr, training_epochs,\
+                nsize, data_mode, centric, gameversion, loss_fn, curr, 0)
 
         if centric in ['allocentric', 'egocentric']:
             tr_successes, te_successes, states = self.run_single_train_sess(\
                     self.nsamples, mna, lr, training_epochs, nsize, eps_expl, \
-                    opmzr, gsz, data_mode, centric,  s)
+                    opmzr, gsz, data_mode, centric, gameversion, loss_fn, curr, s)
             save_as_successes(s+'-successes', tr_successes, te_successes, \
                 states, smooth_factor, centric)
+            self.trial_counter+=1
             return;
 
         elif centric=='allo-ego':
             tr_successes_e, te_successes_e, st_e = self.run_single_train_sess(\
                     self.nsamples, mna, lr, training_epochs, nsize, eps_expl, \
-                    opmzr, gsz, data_mode, 'egocentric',  s)
+                    opmzr, gsz, data_mode, 'egocentric', gameversion, \
+                    loss_fn, curr, s)
             tr_successes_a, te_successes_a, st_a = self.run_single_train_sess(\
                     self.nsamples, mna, lr, training_epochs, nsize, eps_expl, \
-                    opmzr, gsz, data_mode, 'allocentric',  s)
-            #print(tr_successes_e.shape, te_successes_e.shape, tr_successes_a.shape, te_successes_a.shape)
+                    opmzr, gsz, data_mode, 'allocentric',  gameversion, \
+                    loss_fn, curr, s)
+            self.trial_counter+=1
             assert(st_e==st_a)
             save_as_successes(s+'-successes', tr_successes_e, te_successes_e, \
                 st_e, smooth_factor, ['ego','allo'],
@@ -206,20 +175,36 @@ class experiment(object):
         
 
     def run_single_train_sess(self, nsamples, mna, lr, training_epochs, \
-            nsize, eps_expl, opmzr, gsz, data_mode, centric, s=''):
+            nsize, eps_expl, opmzr, gsz, data_mode, centric, gameversion, \
+            loss_fn, curr, s=''):
         Tr_Successes = [];      Tr_losses = []; 
         Te_Successes = [];      Te_losses = [];  
         states = None
         for ri in range(nsamples):
             ovr = {'max_num_actions': mna, 'learning_rate':lr, \
                     'nepochs': training_epochs, 'netsize':nsize, \
-                    'epsilon':eps_expl, 'loss_function':'square', \
-                    'gamesize':gsz, \
+                    'epsilon':eps_expl, 'loss_function':loss_fn, \
+                    'gamesize':gsz, 'curriculum':curr, \
                     'optimizer_tup':opmzr, 'rotation':False };
-            r = reinforcement_b(self.version, centric, override=ovr, \
-                    game_shape=gsz, data_mode=data_mode, \
-                    seed=self.curseeds[ri])
-            print("Running sample # "+str(ri+1)+'/'+str(nsamples))
+            r = reinforcement_b(gameversion, centric, override=ovr, \
+                    data_mode=data_mode, seed=self.curseeds[ri])
+
+            print(("\n **********  NEW Network, trial number "+str(1+\
+                self.trial_counter)+'/'+str(self.tot_num_trials)))
+            print(("\t max number of actions: "+str(mna)))
+            print(("\t learning rate: "+str(lr)))
+            print(("\t num training epochs: "+str(training_epochs)))
+            print(("\t samples: "+str(self.nsamples)))
+            print(("\t frame: "+centric))
+            if not curr==None: print(("\t data mode: "+str(data_mode)))
+            print(("\t exploration epsilon: "+str(eps_expl)))
+            print(("\t network shape: "+str(nsize)))
+            if not gsz==None: print(("\t game input shape: "+str(gsz)))
+            print(("\t loss: "+loss_fn))
+            if not curr==None: print(("\t curriculum: "+curr))
+            print(("\t game version: "+str(gameversion)))
+            print(("\t optimizer: "+str(opmzr)))
+            print("Running sample # "+str(ri+1)+'/'+str(nsamples)+': '+centric)
             results = r.run_session(params={ 'disp_avg_losses':20,\
                 'buffer_updates':False, 'rotational':False, 'printing':False}) 
             Tr_losses.append(results.get('train', 'losses'))
@@ -231,10 +216,12 @@ class experiment(object):
             if training_epochs > 30 and len(s)>0:
                 s_ = s+' sample #'+str(ri)+' last 30 test accs: '+'\n'+\
                         str(test_results[-30:])+'\n'
-                self.fin_logfile.write(unicode(s_))
+                try:    self.fin_logfile.write(unicode(s_))
+                except: self.fin_logfile.write(s_)
                 s_ = s+' sample #'+str(ri)+' last 30 test accs: '+'\n'+\
                         str(test_results)+'\n'
-                self.tot_logfile.write(unicode(s_))
+                try:    self.tot_logfile.write(unicode(s_))
+                except: self.tot_logfile.write(s_)
             if states==None: 
                 states = results.get('states')
         
@@ -245,110 +232,26 @@ class experiment(object):
 
 
 
-    def __deprecated__(self):
-        '''print "readout results: "
-#    print "\t avg tr, te losses:", list(np.mean(avg_losses[:,-1,:], axis=0))
-#    print "\t avg tr, te nsteps:", list(np.mean(avg_steps[:,-1,:], axis=0))
-#    print "\t avg tr, te reward:", list(np.mean(avg_reward[:,-1,:], axis=0))'''
-        arr = np.array((avg_losses, avg_steps, avg_reward))
-        # arr shape: (2: losses & steps, nsamples, max_num_actions, 2: Tr & Te)
-        self.MNA.append(arr)
-
-        # Plot Q's actions & rewards, per epoch:
-        ActMat3=np.zeros((3,training_epochs,N_ACTIONS,2)) 
-        # ^  Plot reward,loss,Q per epoch per action in train, test.
-        Q_sorted = []
-        for ep in range(training_epochs): 
-            Q_sorted.append([])
-        for q in Q:
-            Q_sorted[q['epoch']].append(q)
-        for q_ in Q_sorted:
-            for q in q_:
-                if q['mode']=='train': tr_te = 0
-                else: tr_te = 1
-                ActMat3[0,q['epoch'],q['action'],tr_te] += q['reward']
-                ActMat3[1,q['epoch'],q['action'],tr_te] += q['loss']
-                ActMat3[2,q['epoch'],q['action'],tr_te] += q['Q'][q['action']]
-        for e in range(1,training_epochs): # Smoothing
-          for tt in range(2):
-            for a in range(4):
-              for lqr in [1,2]:
-                continue
-                if ActMat3[lqr,e,a,tt]==0.0:
-                  ActMat3[lqr,e,a,tt] = ActMat3[lqr,e-1,a,tt]; # ...
-        self.iterator += 1
-        
-        
-
-        # Plot R, Q, ...? by state:
-        if self.version=='v0-a_fixedloc' and gsz==(5,5):
-            if mna==1: 
-                num_states = (16 if centric=='allocentric' else 12)
-            if mna==2:
-                num_states = (44 if centric=='allocentric' else 21)
-        elif self.version=='v0-single' and gsz==(5,5):
-            if mna==1:  num_states = 4
-            if mna==2:  num_states = 10
-        else: raise Exception("version not implemented: num states unk")
-        StateMat = np.zeros((4,training_epochs,num_states,2)) 
-        # ^ Plot [action,] per epoch per state in train, test.
-
-        # info: q_ is dict of epoch, action, reward, Q_data, 
-        #   mode[train/test], loss, state.
-        # Q_data has format: (a0_est, last_loss, R, Q0, updated_Q0, 
-        # mode['train'/'test'])
-        states_found = {} # To be sorted later;  format: (agent_x, 
-        # agent_y, goal_x, goal_y) -> index in state_mat
-        for q_ in Q_sorted:
-            for q in q_:
-                st = q['state']
-                state_id = tuple([pos[0] for pos in np.nonzero(\
-                        q['state'].grid[:,:,agentLayer])] + [pos[0] for \
-                        pos in np.nonzero(q['state'].grid[:,:,goalLayer])])
-                if not state_id in states_found: 
-                    states_found[state_id] = len(states_found)
-                state_index = states_found[state_id]
-
-                StateMat[q['action'], q['epoch'], state_index, \
-                        (0 if q['mode']=='train' else 1) ] = 1;
-                # Overwriting: happens only if in the same *trial* the agent 
-                # backtracks in mna >= 3 and takes a different action the 
-                # second time: ie, very infrequently since Q udpate would 
-                # have to happen
-        if self.no_save: return
-
-        #'-nsamples' + str(nsamples) + \
-        s=self.get_filesave_str(mna, lr, gsz, eps_expl, opmzr, \
-                training_epochs, nsize, data_mode, centric, 0)
-            
-        
-        save_as_state_actions1(states_found, StateMat, gsz, \
-                        s+'-per_state_actions')
-
-        #self.iterator+=1
-        np.save(s+'-loss-graph.npy', arr)
-
-
-
-
-
     def get_filesave_str(self, mna, lr, gsz, eps_expl, opmzr, \
-            nepochs, nsize, data_mode, centric, seed=None): 
+            nepochs, nsize, data_mode, centric, gameversion, loss_fn, curr, \
+            seed=None): 
         if type(eps_expl)==float:
             eps = '%2.e' % eps_expl 
         else: eps = eps_expl.replace('/','_')
         if type(opmzr)==list and len(opmzr)==2:
             opmzr = '_'.join([opmzr[0], '%1.e' % opmzr[1]])
-        s= os.path.join(self.dest, self.version) + \
+        s= os.path.join(self.dest, gameversion) + \
                 '-mna' + str(mna) + \
                 '-lr' + '%1.e' % lr + \
                 '-nepochs'+str(nepochs) +\
-                '-' + str(gsz).replace(', ', 'x') + \
+                ('-' + str(gsz).replace(', ', 'x') if not gsz==None else '') + \
                 '-nsamps_' + str(self.nsamples) + \
                 '-eps_' + str(eps) + \
                 '-opt_'+str(opmzr) + \
                 '-net_'+'_'.join([str(i) for i in nsize]) + \
                 '-data_'+data_mode+'-frame_'+centric +\
+                '-loss_'+loss_fn +\
+                ('-curr'+curr if not curr==None else '')+\
                 ('-seed_'+str(seed) if not seed==None else '')
         return s
 
@@ -369,6 +272,8 @@ class experiment(object):
 #test_script('v1-oriented', './storage/4-22-17-oriented-gamesize/')
 
 if __name__=='__main__':
-    experiment(mode='ego-allo-test')
+    if len(sys.argv)==1:mode='ego-allo-test'
+    else: mode = sys.argv[1]
+    experiment(mode)
 
 print("Done.")

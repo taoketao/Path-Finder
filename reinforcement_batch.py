@@ -137,9 +137,14 @@ class reinforcement_b(object):
                 'which # action is this' identifiability.
         ...
     '''
-    def __init__(self, which_game, frame, game_shape, override=None,
+    def __init__(self, which_game, frame, game_shape=None, override=None,
                  load_weights_path=None, data_mode=None, seed=None):
         np.random.seed(seed)
+        if game_shape == None: 
+            if 'v3' in which_game: game_shape = (9,9)
+            if 'v2' in which_game: game_shape = (7,7)
+            if 'v1' in which_game: game_shape = (5,5)
+            if 'v0' in which_game: game_shape = (5,5)
         self.env = environment_handler3(game_shape, frame, world_fill='roll')
         self.sg = state_generator(game_shape)
         self.sg.ingest_component_prefabs(COMPONENTS_LOC)
@@ -175,7 +180,10 @@ class reinforcement_b(object):
             }[which_game]
 
         if 'v2' in which_game:
-            init_states = self.sg.generate_all_states_upto_2away('v2',self.env)
+            if which_game == 'v2-a_fixedloc_eq':
+                init_states = self.sg.generate_all_states_only_2away('v2',self.env)
+            if which_game == 'v2-a_fixedloc_leq':
+                init_states = self.sg.generate_all_states_upto_2away('v2',self.env)
             pdgm = 'v2'
             #print('\t',len(init_states))
 
@@ -215,7 +223,7 @@ class reinforcement_b(object):
             self.eps_schedule = [1.0]
             for i in range(self.training_epochs):
                 self.eps_schedule.append(self.eps_schedule[-1]*f)
-
+        self.curriculum = override['curriculum']
 
         # If load_weights_path==None, then initialize weights fresh&random.
         self.Net = network(self.env, 'NEURAL', override=override, \
@@ -290,14 +298,17 @@ class reinforcement_b(object):
                 self.Net.save_weights(params['saving']['dest'], prefix= \
                         'epoch'+str(epoch)+'--')
             # Take pass over data. Todo: batchify here
-            if not self.data_mode == None: 
-                params['present_mode']=self.data_mode
-            if params['present_mode']=='ordered':
-                next_states = self.init_states
-            elif params['present_mode']=='shuffled':
-                next_states = np.random.permutation(self.init_states)
-                #TODO: add more interesting world states?
-            else: raise Exception("No provided or default data mode.")
+            if not self.curriculum == None:
+                next_states = self.get_next_states(epoch)
+            else:
+                if not self.data_mode == None: 
+                    params['present_mode']=self.data_mode
+                if params['present_mode']=='ordered':
+                    next_states = self.init_states
+                elif params['present_mode']=='shuffled':
+                    next_states = np.random.permutation(self.init_states)
+                    #TODO: add more interesting world states?
+                else: raise Exception("No provided or default data mode.")
 
             ep_losses = None
             for __mode in ['train', 'test']:
@@ -318,10 +329,11 @@ class reinforcement_b(object):
                 if len(last_n_test_losses) > params['disp_avg_losses']:
                     last_n_test_losses.pop(0)
 
-            if gethostname()=='PDP' and epoch==1000: 
-                call(['nvidia-smi'])
+#            if gethostname()=='PDP' and epoch==1000: 
+#                call(['nvidia-smi'])
 
-            if (epoch%1000==0 and epoch>0) or epoch==params['disp_avg_losses']: 
+            if (epoch%1000==0 and epoch>0) or \
+                    (epoch<=params['disp_avg_losses'] and epoch%5==0): 
                 s = "Epoch #"+str(epoch)+"/"+str(self.training_epochs)
                 s += '\tlast '+str(params['disp_avg_losses'])+' losses'+\
                         ' averaged over all states:'
@@ -354,6 +366,9 @@ class reinforcement_b(object):
         elif self.epsilon_exploration[:5]=='decay':
             return self.eps_schedule[epoch]
         else: raise Exception("Epsilon strategy not implemented")
+
+    def get_next_states(self, epoch):
+        pass# use data mode, curriculum
 
 
     def _do_batch(self, states, epoch, mode, buffer_me=False, printing=False):
@@ -442,7 +457,7 @@ class reinforcement_b(object):
 
 if __name__=='__main__':
     ovr = {'max_num_actions':2, 'learning_rate':1e-4, 'nepochs':1, \
-            'netsize':('fc',24), 'epsilon':0.5, 'loss_function':'huber',\
+            'netsize':('fc',24), 'epsilon':0.5, 'loss_function':'huber10',\
             'gamesize':(7,7), 'optimizer_tup':('adam',1e-6)}
     r = reinforcement_b('v2-a_fixedloc', 'egocentric', override=ovr, \
             game_shape=(7,7), data_mode='ordered')
