@@ -54,15 +54,15 @@ class experiment(object):
         self.iterator = 0;
         self.seed=42
         if mode=='ego-allo-test':
-            self.dest = './storage/5-21/14/'
+            self.dest = './storage/5-21/16/'
             if not os.path.exists(self.dest): os.makedirs(self.dest)
             self.nsamples = 1
             self.curseeds = list(range(self.seed,self.seed+self.nsamples))
             self.no_save = False
-            self.fin_logfile = open(get_time_str(self.dest,'fin_logfile.txt'), \
-                    'w+',encoding="utf-8")
-            self.tot_logfile = open(get_time_str(self.dest,'tot_logfile.txt'), \
-                    'w+',encoding="utf-8")
+            self.fin_logfile = open(get_time_str(self.dest,'fin_logfile')\
+                    +'.txt', 'w+',encoding="utf-8")
+            self.tot_logfile = open(get_time_str(self.dest,'tot_logfile'), \
+                    +'.txt', 'w+',encoding="utf-8")
             self.run_exp('allo-ego')
 
         self.fin_logfile.close()
@@ -83,13 +83,13 @@ class experiment(object):
         '''------------------'''
         ''' Options to edit: '''
         '''------------------'''
-        _training_epochs = [10000]
+        _training_epochs = [8000]
         mnas = [2]
-        gameversions = [ 'v0-a_fixedloc','v2-a_fixedloc_leq','v2-a_fixedloc_eq' ]
+        gameversions = [ 'v2-a_fixedloc_leq' ]
         #gameversions = [ 'v0-a_fixedloc' ]
-        loss_fns = [ 'square', 'huber0.1', 'huber1', 'huber10' ]
-        curricula = [ None ]
-        lrs = [3e-4]
+        loss_fns = [ 'huber1e-4','huber1e-3','huber1e-2' ]
+        curricula = [ 'uniform', 'linear_anneal_5e-1' ] # None, 'linear_anneal' == 'linear_anneal_1'
+        lrs = [1e-4]#[1e-3, 3e-4, 1e-4, 3e-5]
         epsilons = ['decay_99']
         optimizers = [ ['adam',1e-7] ] 
         network_sizes = [\
@@ -251,7 +251,7 @@ class experiment(object):
                 '-net_'+'_'.join([str(i) for i in nsize]) + \
                 '-data_'+data_mode+'-frame_'+centric +\
                 '-loss_'+loss_fn +\
-                ('-curr'+curr if not curr==None else '')+\
+                ('-curr_'+curr if not curr==None else '')+\
                 ('-seed_'+str(seed) if not seed==None else '')
         return s
 

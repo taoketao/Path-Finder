@@ -475,7 +475,7 @@ class network(object):
         if override==None or not 'loss_function' in override:
             return tf.reduce_sum(tf.square( pred - targ ))
         lf = override['loss_function']
-        print('\t'+lf)
+        #print('\t'+lf)
         if lf == 'square' or lf==None:
             return tf.reduce_sum(tf.square( pred - targ ))
         if 'huber' in lf:

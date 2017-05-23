@@ -45,8 +45,9 @@ class state(object):
         Roughly a 'RESTful' class: access is based around get, post, del, put.
     '''
 
-    def __init__(self, gridsize):
+    def __init__(self, gridsize, name=None):
         self.gridsz = gridsize
+        self.name=name[name.rfind('/')+1:]
         self.sparse = False # coo_matrix format?
         self.grid = np.zeros((self.gridsz[XDIM], self.gridsz[YDIM], \
                 NUM_LAYERS), dtype='float32')
@@ -148,7 +149,7 @@ class state(object):
 
     ''' Return an identical but distinct version of this state object '''
     def copy(self):
-        s_p = state(self.gridsz)
+        s_p = state(self.gridsz, self.name)
         s_p.grid = np.copy(self.grid)
         s_p.a_loc = self.a_loc
         s_p.g_loc = self.g_loc
@@ -255,14 +256,14 @@ class environment_handler3(object):
     def Lft(self): return self._AgentFwd + 3 % 4
     
     ''' Initialize a new state with post_state. '''
-    def post_state(self, parameters, except_init=False):
+    def post_state(self, parameters, except_init=False, name=None):
         '''
         Convention: parameters should be a dict of:
             'agent_loc' = (x,y),  'goal_loc' = (x,y), 'immobiles_locs' in:
             {'borders' which fills only the borders, list of points}, 
             'mobiles_locs' = list of points.
         '''
-        S = state(self.gridsz)
+        S = state(self.gridsz, name)
         S.post_agent(parameters['agent_loc'])
         S.post_goal(parameters['goal_loc'])
         S.post_immobile_blocks(parameters['immobiles_locs'])
@@ -487,9 +488,9 @@ class environment_handler3(object):
                     if c=='G': parameters['goal_loc'] = (x,y)
         self.states = []
         if except_init=='except':
-            return self.post_state(parameters, True)
+            return self.post_state(parameters, True, name=fn[:-4])
         else:
-            return self.post_state(parameters, False)
+            return self.post_state(parameters, False, name=fn[:-4])
 
     ''' Functions for accessing the optimal minimum number of steps required 
     to achieve the goal.  Used for testing. '''

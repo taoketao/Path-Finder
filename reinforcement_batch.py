@@ -60,15 +60,12 @@ class session_results(object):
             self._data[(epoch, episode, mode)] = D
 
     def get(self, p1, p2=None, p3=None, batch=True): 
-        #print(p1,p2,p3)
         if p1 in ['train','test'] and p2==None and p3==None:
             return self._get(ALL,ALL,p1)
         if p1 in ['train','test'] and p2 in ['successes'] and p3==None:
             x__ = []
             for X in self._get(ALL,ALL,p1):
                 x__.append(np.array([ 1.0 if x['success'] else 0.0 for x in X]))
-#            print(x__[-1].shape, len(x__))
-#            sys.exit()
             return np.array( x__ )
         if p1 in ['train','test'] and p2 in ['nsteps'] and p3==None:
             return np.array( [[ x['num_a'] for x in X]\
@@ -77,8 +74,6 @@ class session_results(object):
             x__ = []
             for X in self._get(ALL,ALL,p1):
                 x__.append(np.array([ x['loss'] for x in X]))
-#            print(x__[-1].shape, len(x__))
-#            sys.exit()
             return np.array( x__ )
 
             return np.array( [[ x['loss'] for x in X]\
@@ -104,8 +99,6 @@ class session_results(object):
             return [self._get(ep, episode, mode) for ep in range(self.nepochs)]
         if episode == ALL: 
             return [self._get(epoch, ep, mode) for ep in range(self.nepisodes)]
-#        if self.batch:
-#            return self._data[(epoch, mode)].copy()
         return self._data[(epoch, episode, mode)].copy()
 
 
@@ -185,7 +178,6 @@ class reinforcement_b(object):
             if which_game == 'v2-a_fixedloc_leq':
                 init_states = self.sg.generate_all_states_upto_2away('v2',self.env)
             pdgm = 'v2'
-            #print('\t',len(init_states))
 
         if 'printing'in override and override['printing']==True:
             for i,s in enumerate(init_states):
@@ -224,6 +216,19 @@ class reinforcement_b(object):
             for i in range(self.training_epochs):
                 self.eps_schedule.append(self.eps_schedule[-1]*f)
         self.curriculum = override['curriculum']
+        if self.which_game=='v2-a_fixedloc_leq' and 'linear_anneal' in self.curriculum:
+            self.tasks = {}
+            self.tasks['easy'] = {i:s for i,s in enumerate(self.init_states) \
+                    if '_' in s.name}
+            self.tasks['hard'] = {i:s for i,s in enumerate(self.init_states) \
+                    if not '_' in s.name}
+            self.easy_ids = list(self.tasks['easy'])
+            self.n_easy = len(self.tasks['easy'])
+            self.n_hard = len(self.tasks['hard'])
+            self.minibatchsize = 8
+        else:
+            self.minibatchsize = len(self.init_states)
+
 
         # If load_weights_path==None, then initialize weights fresh&random.
         self.Net = network(self.env, 'NEURAL', override=override, \
@@ -284,13 +289,12 @@ class reinforcement_b(object):
         sess.run(init)
         
         episode_results = session_results(self.training_epochs, \
-                len(self.init_states), batch=True)
+                self.minibatchsize, batch=True)
 
         Buff=[]
         last_n_test_losses = []
 
         tf.set_random_seed(self.seed)
-        #print(self.training_epochs)
         for epoch in range(self.training_epochs):
             # Save weights
             save_freq = params['saving']['freq']
@@ -298,23 +302,25 @@ class reinforcement_b(object):
                 self.Net.save_weights(params['saving']['dest'], prefix= \
                         'epoch'+str(epoch)+'--')
             # Take pass over data. Todo: batchify here
-            if not self.curriculum == None:
+            if not (self.curriculum == None or self.curriculum=='uniform'):
                 next_states = self.get_next_states(epoch)
             else:
                 if not self.data_mode == None: 
                     params['present_mode']=self.data_mode
                 if params['present_mode']=='ordered':
-                    next_states = self.init_states
+                    next_states = [(i,s) for i,s in enumerate(self.init_states)]
                 elif params['present_mode']=='shuffled':
-                    next_states = np.random.permutation(self.init_states)
+                    order = np.random.permutation(range(len(self.init_states)))
+                    next_states = [(i,self.init_states[i]) for i in order]
                     #TODO: add more interesting world states?
-                else: raise Exception("No provided or default data mode.")
+                else: raise Exception("Provided or default data mode not "+\
+                            "implemented or not provided..")
 
             ep_losses = None
             for __mode in ['train', 'test']:
                 num_as, goals, actns, ep_losses = \
                         self._do_batch(next_states, epoch, __mode)
-                for si, s0 in enumerate(next_states):
+                for si, (_,s0) in enumerate(next_states):
                     episode_results.put(epoch, si,  \
                           { 's0': s0, \
                             'num_a': num_as[si], \
@@ -368,7 +374,29 @@ class reinforcement_b(object):
         else: raise Exception("Epsilon strategy not implemented")
 
     def get_next_states(self, epoch):
-        pass# use data mode, curriculum
+        if self.curriculum==None or self.curriculum=='uniform':
+            raise Exception("dev err")
+        if 'linear_anneal' in self.curriculum:
+            # data mode: random selection with replacement.
+            n_states = self.n_easy + self.n_hard
+            if len(self.curriculum)<=14:
+                easy_pct = 1- epoch/self.training_epochs
+            else:
+                easy_pct = 1- (1-float(self.curriculum[14:]))*epoch/self.training_epochs
+            
+            easy_p = easy_pct 
+            hard_p = (1-easy_pct) 
+
+            ps = np.array([easy_p if i in self.easy_ids else hard_p \
+                    for i in range(n_states)])
+            ps /= np.sum(ps)
+#            print(['%1.3f'% p for p in ps], easy_pct)
+#            if epoch==199:
+#                print(ps)
+#                sys.exit()
+            selections = np.random.choice(range(n_states), self.minibatchsize, p=ps)
+            return [(i,self.init_states[i]) for i in selections]
+
 
 
     def _do_batch(self, states, epoch, mode, buffer_me=False, printing=False):
@@ -378,7 +406,9 @@ class reinforcement_b(object):
         num_a = [0]*nstates
         wasGoalReached = [False]*nstates
         if printing: print('\n\n')
-        cur_states = [ [s.copy() for s in states] ]
+        #print([(i,s.name) for i,s in states])
+        cur_state_tups = [ [(i,s.copy()) for i,s in states] ]
+        cur_states = [ [c[1] for c in cur_state_tups[0]] ]
         attempted_actions = -1*np.ones((self.max_num_actions, nstates))
         losses = []
         for nth_action in range(self.max_num_actions):
