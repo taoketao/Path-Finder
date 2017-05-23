@@ -27,6 +27,7 @@ DEFAULT_EPSILON = 0.9
 ALL=-1
 A_LAYER=0
 G_LAYER=1
+VALID_FLAG_PLACEHOLDER=True
 
 
 class session_results(object):
@@ -191,8 +192,10 @@ class reinforcement_b(object):
         net_params=None
 
         if not override==None:
-            self.max_num_actions = override['max_num_actions'] if \
-                    'max_num_actions' in override else  MAX_NUM_ACTIONS
+            self.mna_type = override['max_num_actions'] if \
+                    'max_num_actions' in override else MAX_NUM_ACTIONS
+            self.max_num_actions = self.mna_type if type(self.mna_type)==int \
+                    else int(self.mna_type[:self.mna_type.find('_')])
             self.training_epochs = override['nepochs'] if \
                     'nepochs' in override else  MAX_NUM_ACTIONS
         if not 'rotation' in override: override['rotation']=False
@@ -397,6 +400,16 @@ class reinforcement_b(object):
             selections = np.random.choice(range(n_states), self.minibatchsize, p=ps)
             return [(i,self.init_states[i]) for i in selections]
 
+    def action_drop(self, epoch):
+        if type(self.mna_type)==int: return False
+        method = self.mna_type[self.mna_type.find('_')+1:]
+        if 'anneal_linear' in method:
+            if method=='anneal_linear': amt = self.training_epochs
+            else: amt = int(method[14:])
+            if np.random.rand() < float(epoch)/amt: 
+                return False
+            return True
+        raise Exception("MNA method not recognized: "+self.mna_type)
 
 
     def _do_batch(self, states, epoch, mode, buffer_me=False, printing=False):
@@ -404,6 +417,7 @@ class reinforcement_b(object):
         update_buff = []
         nstates = len(states)
         num_a = [0]*nstates
+        mna_cutoffs = [-1]*nstates
         wasGoalReached = [False]*nstates
         if printing: print('\n\n')
         #print([(i,s.name) for i,s in states])
@@ -413,8 +427,11 @@ class reinforcement_b(object):
         losses = []
         for nth_action in range(self.max_num_actions):
             for si,s0 in enumerate(cur_states[-1]):
+                if mna_cutoffs[si]>=0: continue
                 if self.env.isGoalReached(s0): 
-                   wasGoalReached[si]=True
+                    wasGoalReached[si]=True
+                elif nth_action>0 and mode=='train' and self.action_drop(epoch):
+                    mna_cutoffs[si] = nth_action # wp, drop actions
                 else:
                     num_a[si] += 1
             Q0_s = self.Net.getQVals(cur_states[-1])
@@ -426,13 +443,13 @@ class reinforcement_b(object):
                 _epsilon = self._get_epsilon(epoch)
                 eps_chs = np.random.rand(nstates)
                 for eps in np.where(eps_chs < _epsilon)[0]:
-                    if wasGoalReached[eps]:
-                        a0_est[eps]=-1; continue
+                    if mna_cutoffs[eps]>= 0:  a0_est[eps]=-2; continue
+                    if wasGoalReached[eps]:  a0_est[eps]=-1; continue
                     eps_chosen[eps]=True
                     a0_est[eps] = np.random.choice(ACTIONS).astype(int)
                 for eps in np.where(eps_chs >= _epsilon)[0]:
-                    if wasGoalReached[eps]:
-                        a0_est[eps]=-1; continue
+                    if mna_cutoffs[eps]>= 0:  a0_est[eps]=-2; continue
+                    if wasGoalReached[eps]:  a0_est[eps]=-1; continue
                     a0_est[eps] = np.argmax(Q0_s[eps,:]).astype(int)
             elif mode=='test':
                 a0_est = np.argmax(Q0_s, axis=1).astype(int)
@@ -443,25 +460,29 @@ class reinforcement_b(object):
             s1_ests = []
             logic_rets = []
             for si,a in np.ndenumerate(a0_est):
-                si = si[0]; a = int(a);
+                si = si[0]
+                a = int(a)
                 s0 = cur_states[-1][si]
-                if a==-1:
+                if a<0:
                     s1_est = s0  
                 else:
                     s1_est = self.env.performActionInMode(s0, a)
                 s1_ests.append(s1_est)
-                tmp = self._stateLogic(s0, Q0_s[si], a, s1_est, a, printing)
-                a0_valid, s1_valid, R, _, valid_flag = tmp
-                logic_rets.append(tmp)
+                if a>=0: 
+                    tmp = self._stateLogic(s0, Q0_s[si], a, s1_est, a, printing)
+                    _,s1_valid,R,_,valid_flag = tmp
+                    logic_rets.append( (s1_valid, R, valid_flag) )
+                else:
+                    logic_rets.append( (s0, NO_REWARD, VALID_FLAG_PLACEHOLDER) )
 
-            s1_valids = [s[1] for s in logic_rets]
+            s1_valids = [s[0] for s in logic_rets]
             Q1_s = self.Net.getQVals(s1_valids)
 
             valid_flags = np.zeros( (nstates,), dtype=bool)
             for i in range(nstates):
-                valid_flag = logic_rets[i][-1]
                 if a0_est[i]>=0:
-                    targ[i,a0_est[i]] = R
+                    targ[i,a0_est[i]] = logic_rets[i][1]
+                    valid_flag = logic_rets[i][2]
                     if valid_flag:
                         targ[i,a0_est[i]] -= GAMMA * np.max(Q1_s[i,:])
                     else:
@@ -473,6 +494,10 @@ class reinforcement_b(object):
             elif not mode=='test': raise Exception(mode)
            
             cur_states.append(s1_valids)
+        #if epoch % 300 < 3 and mode=='test': 
+        if epoch % 300 < 3: 
+            print('mnas cutoff at epoch '+str(epoch)+': '\
+                +str(np.mean(np.array(mna_cutoffs))))
 
 #        print  num_a;print wasGoalReached; print attempted_actions;print losses; print np.mean(losses)
 #        print nth_action, mode, '\n'

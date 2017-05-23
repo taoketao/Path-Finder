@@ -52,16 +52,16 @@ class experiment(object):
         but also a capacity '''
     def __init__(self, mode):
         self.iterator = 0;
-        self.seed=42
+        self.seed = 42002
         if mode=='ego-allo-test':
-            self.dest = './storage/5-21/16/'
+            self.dest = './storage/5-21/21/'
             if not os.path.exists(self.dest): os.makedirs(self.dest)
             self.nsamples = 1
             self.curseeds = list(range(self.seed,self.seed+self.nsamples))
             self.no_save = False
             self.fin_logfile = open(get_time_str(self.dest,'fin_logfile')\
                     +'.txt', 'w+',encoding="utf-8")
-            self.tot_logfile = open(get_time_str(self.dest,'tot_logfile'), \
+            self.tot_logfile = open(get_time_str(self.dest,'tot_logfile')\
                     +'.txt', 'w+',encoding="utf-8")
             self.run_exp('allo-ego')
 
@@ -83,17 +83,21 @@ class experiment(object):
         '''------------------'''
         ''' Options to edit: '''
         '''------------------'''
-        _training_epochs = [8000]
-        mnas = [2]
+        _training_epochs = [1000]
+        mnas = ['2_anneal_linear_500']#, '2_anneal_linear', 2]
         gameversions = [ 'v2-a_fixedloc_leq' ]
         #gameversions = [ 'v0-a_fixedloc' ]
-        loss_fns = [ 'huber1e-4','huber1e-3','huber1e-2' ]
-        curricula = [ 'uniform', 'linear_anneal_5e-1' ] # None, 'linear_anneal' == 'linear_anneal_1'
-        lrs = [1e-4]#[1e-3, 3e-4, 1e-4, 3e-5]
+        loss_fns = [ 'huber5e-4' ]#,'huber5e-5' ]
+#        curricula = [ 'linear_anneal_5e-1' ] # uniform
+        curricula = [ 'uniform' ] 
+        lrs = [3e-4]
         epsilons = ['decay_99']
         optimizers = [ ['adam',1e-7] ] 
         network_sizes = [\
-                ('fc','fc',64,32),\
+#                ('fc','fc',64,64),\
+                ('fc',64),\
+#                ('fc','fc','fc',64,64,32),\
+#                ('cv','cv','fc',64,64,32),\
                 ]
         data_modes = ['shuffled']
         smoothing = 25 # <- Adjust for plotting: higher=smoother
@@ -106,11 +110,10 @@ class experiment(object):
               len(gameversions)*len(curricula)*len(loss_fns)
         saved_time_str = get_time_str(self.dest)
         self.MNA = []
-        for mna in mnas:
-          [[[[[[[[[ self.run_trial( epch, mna, lr, nsize, eps_expl, opmzr, None, \
+        [[[[[[[[[[ self.run_trial( epch, mna, lr, nsize, eps_expl, opmzr, None, \
                 centric, nsamples, dm, gv, lossfn, curr, smoothing)\
                 for epch in _training_epochs ]\
-                #for mna in mnas ]\
+                for mna in mnas ]\
                 for lr in lrs ]\
                 for nsize in network_sizes ]\
                 for eps_expl in epsilons ]\
@@ -119,14 +122,14 @@ class experiment(object):
                 for lossfn in loss_fns]\
                 for curr in curricula]\
                 for gv in gameversions]
-          if self.no_save: continue#return
-          [[[[[[[[[ save_as_plot1(self.get_filesave_str(mna, lr, None, eps_expl,\
+        if self.no_save: return
+        [[[[[[[[[[ save_as_plot1(self.get_filesave_str(mna, lr, None, eps_expl,\
                     opmzr, epch, nsize, data_mode, centric, gv, lossfn, curr,\
-                    0) + '-loss-graph.npy', \
+                    self.seed) + '-loss-graph.npy', \
                     str(lr), str(mna), str(nsamples), which='l', \
                     div=N_EPS_PER_EPOCH, smoothing=smoothing)
                 for epch in _training_epochs ]\
-                #for mna in mnas ]\
+                for mna in mnas ]\
                 for lr in lrs ]\
                 for nsize in network_sizes ]\
                 for eps_expl in epsilons ]\
@@ -146,7 +149,7 @@ class experiment(object):
     def run_trial(self, training_epochs, mna, lr, nsize, eps_expl, opmzr, gsz,\
             centric, nsamples, data_mode, gameversion, loss_fn, curr, smooth_factor=50):
         s=self.get_filesave_str(mna, lr, gsz, eps_expl, opmzr, training_epochs,\
-                nsize, data_mode, centric, gameversion, loss_fn, curr, 0)
+                nsize, data_mode, centric, gameversion, loss_fn, curr, self.seed)
 
         if centric in ['allocentric', 'egocentric']:
             tr_successes, te_successes, states = self.run_single_train_sess(\

@@ -123,7 +123,9 @@ def save_as_plot1(fns, lr=None, mna=None, nsamples=None, which='l', \
 
         plt.tight_layout(1.2)
         #plt.ylim(-0.1, 1.1)
-        plt.ylim(bottom=0)
+        #plt.ylim(bottom=0)
+        plt.yscale('log')
+        plt.ylim(top=1.5)
         plt.savefig(fn[:-4]+'.png')
         #plt.savefig(fn[:-4]+'.pdf', format='pdf')
         #plt.show()
@@ -339,7 +341,8 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
     else: fs=10
     ax[(1,1)].text(1.2*Tr.shape[0],0, s2, fontsize=fs, family='monospace')
     s.replace('-0','TMP').replace('_',':').replace('-','  ').replace('TMP','-0')
-    plt.gcf().suptitle( s[s.find('v'):s.find(' successes')])
+    plt.gcf().suptitle( s[s.find('v'):s.find('net')] +'\n'+\
+            s[s.find('net'):s.find(' successes')])
 
     plt.plot()
     plt.savefig(s+'.png')
