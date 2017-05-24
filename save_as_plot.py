@@ -294,7 +294,7 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
     if Tr.shape[1]==4:
         colors = ['blue','red','green','khaki']
         darkcolors = ['dark'+c for c in colors]
-    elif Tr.shape[1]==12:
+    elif Tr.shape[1]>4:
         colors = ['#ccccff','#9999ff','#6666ff','#3333ff','#0000cc','#000080',\
             '#ccffff','#80ffff','#00ffff','#00cccc','#009999','#008080'] # blues
         darkcolors = ['#ffcccc','#ff8080','#ff1a1a','#e60000','#cc0000','#990000',\
@@ -309,6 +309,8 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
             ax[(0,1)].plot(Te2[:,i], c=darkcolors[i])
     ax[(1,0)].plot(np.mean(Tr, axis=1), c='orange')
     ax[(1,1)].plot(np.mean(Te, axis=1), c='orange')
+#    ax[(1,0)].plot( [3**-1]*Tr.shape[0], c='green')
+#    ax[(1,1)].plot( [3**-1]*Tr.shape[0], c='green')
     if twoplots:
         ax[(1,0)].plot(np.mean(Tr2, axis=1), c='black')
         ax[(1,1)].plot(np.mean(Te2, axis=1), c='black')
@@ -321,7 +323,7 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
     if not states==None and Tr.shape[1]==4:
         for sc in range(len(states)):
             s2 += '\n    '+colors[sc]+':\n'+ _make_str(states[sc],(5,5),-1)
-    if not states==None and Tr.shape[1]==12:
+    if not states==None and Tr.shape[1]>4:
         s2 += _make_str2(states,(7,7), -1, colors, darkcolors)
 
 
@@ -330,7 +332,7 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
             s2 += '\nLight / orange: '+centric[0]
             s2 += '\nDark / black: '+centric[1]
             fs = 14
-        elif Tr.shape[1]==12:
+        elif Tr.shape[1]>4:
             s2 += '\nblues: '+centric[0]
             s2 += '\nreds: '+centric[1]
             fs = 10
@@ -460,12 +462,15 @@ def get_attributes(s_,i):
     while itr<len(sl):
         if 'mna' in sl[itr]:
             attrs['mna'] = 'mna'+sl[itr][3:]
+            while len(attrs['mna'])<25: attrs['mna'] += ' '
             itr += 1;continue
         if 'lr' == sl[itr][:2]:
             attrs['lr'] = 'lr'+sl[itr][2:]+'-'+sl[itr+1]
+            while len(attrs['lr'])<7: attrs['lr'] += ' '
             itr += 2;continue
         if 'nepochs' == sl[itr][:7]:
             attrs['nepochs'] = 'epoch'+sl[itr][7:]
+            while len(attrs['nepochs'])<13: attrs['nepochs'] += ' '
             itr += 1;continue
         if '(' == sl[itr][0] and ')'==sl[itr][-1]:
             attrs['gamesize'] = sl[itr]
@@ -482,9 +487,11 @@ def get_attributes(s_,i):
             itr += 1;continue
         if 'net' in sl[itr]:
             attrs['net'] = 'net'+sl[itr][3:]
+            while len(attrs['net'])<16: attrs['net'] += ' '
             itr += 1;continue
         if 'frame' == sl[itr][:5] and sl[itr+1]=='ego':
             attrs['frame'] = 'allo-ego'
+            while len(attrs['frame'])<5: attrs['frame'] += ' '
             itr += 2;continue
 #        if 'seed' == sl[itr][:4]:
 #            attrs['sample'] = 'whichsamp'+sl[itr][sl[itr].find('#')+1:sl[itr].find(\
@@ -493,10 +500,18 @@ def get_attributes(s_,i):
         if 'opt' == sl[itr][:3]:
             if 'adam' in sl[itr]:
                 attrs['opt'] = 'opt'+sl[itr][4:]+'-'+sl[itr+1]
+                while len(attrs['opt'])<10: attrs['opt'] += ' '
                 itr += 2;continue
             else:
                 attrs['opt'] = 'opt'+sl[itr][4:]
+                while len(attrs['opt'])<10: attrs['opt'] += ' '
                 itr += 1;continue
+        if 'loss' == sl[itr][:4]:
+            pass#if 'huber' in sl['TODO']: pass
+        if 'curr' == sl[itr][:4]:
+            attrs['curr'] = sl[itr]
+            while len(attrs['curr'])<15: attrs['curr'] += ' '
+            itr += 1; continue    
         itr+=1
 
     return attrs
@@ -504,7 +519,7 @@ def get_attributes(s_,i):
 def save_final_losses_process(dest): 
     #for now, only supports one file processing.
     datas = []
-    tmp_data = [0,0,0,0]
+    tmp_data = []
     trials = []
     if type(dest)==list:
         dests = dest
@@ -521,23 +536,28 @@ def save_final_losses_process(dest):
                     trials.append(a)
                     continue
                 if a[:2] == '[[':
-                    tmp_data = [0,0,0,0]
+                    tmp_data = []
                     a = a[1:]
                 al = list(a)
-                tmp_data[0] += int(al[2]);
-                tmp_data[1] += int(al[6]);
-                tmp_data[2] += int(al[10]);
-                tmp_data[3] += int(al[14]);
+                if len(al)<40:
+                    tmp_data += [int(al[2])]
+                    tmp_data += [int(al[6])]
+                    tmp_data += [int(al[10])]
+                    tmp_data += [int(al[14])]
+                else:
+                    for i in [2+4*j for j in range(12)]:
+                        tmp_data += [int(al[i])]
                 counter += 1.0
                 if ']]' in a:
                     for i in range(4): 
                         tmp_data[i] /= counter
                     counter = 0.0
                     data.append(tmp_data)
-        DF.close()
+        DF.close(); #sys.exit()
         datas.append(data)
-    D = np.array(datas)
-    print D.shape; sys.exit()
+    datas = datas[0]
+    D = np.array(datas)#[0,:,:]
+    print D.shape, len(trials), len(datas), len(datas[0])
     if not len(trials)==len(datas):
         raise Exception("inconsistency: "+str(len(trials))+';'+str(len(datas)))
     n_entities = len(datas)
@@ -548,7 +568,7 @@ def save_final_losses_process(dest):
     # insider knowledge....sloppy.....:
     if attributes[-1]['frame']=='allo-ego':
         for i,a in enumerate(attributes):
-            a['ego_or_allo'] = 'ego' if (i/nsamps)%2==0 else 'allo'
+            a['ego_or_allo'] = 'ego ' if (i/nsamps)%2==0 else 'allo'
 
     hyperparams = set() 
     for a in attributes:
@@ -586,9 +606,9 @@ def save_final_losses_process(dest):
         MaxAccsIsolated [ index ] = np.max(D[i,:])
         VarAccsIsolated [ index ] = np.var(D[i,:])**0.5
 
-    #print hyperparams; print hp_map; print nversions; print nversc; 
-    #print nwhere_ge1; print nz; print arr_shape; print ndim; print WhichVary; 
-    #print WhichVaryVals; print WhichVaryValsD;
+    print hyperparams; print hp_map; print nversions; print nversc; 
+    print nwhere_ge1; print nz; print arr_shape; print ndim; print WhichVary; 
+    print WhichVaryVals; print WhichVaryValsD;
 
 
 #        continue
@@ -629,12 +649,12 @@ def save_final_losses_process(dest):
     if ndim==1: Margs = [tuple([])]
     elif ndim==2: Margs = [ (0,), (1,), tuple([])]
     elif ndim==3: Margs = [ (0,), (1,), (2,), (0,2), (1,2), (0,1), tuple([]) ]
-#    if ndim==4: Margs = [ (0,), (1,), (2,), (3,), (0,1), (0,2), (1,2),\
-#         (0,3), (1,3), (2,3), (0,1,2), (0,1,3), (0,2,3), (1,2,3), tuple([])] # ALL
+    elif ndim==4: Margs = [ (0,), (1,), (2,), (3,), (0,1), (0,2), (1,2),\
+         (0,3), (1,3), (2,3), (0,1,2), (0,1,3), (0,2,3), (1,2,3), tuple([])] # ALL
 #    if ndim==4: Margs = [ (1,), (2,), (3,), (1,2), (1,3), (2,3), (1,2,3), \
 #            tuple([])] # all except ego/allo distinction
 #    if ndim==4: Margs = [ (0,1,2), (0,1,3), (0,2,3), (1,2,3), tuple([])] # ALL
-    elif ndim==4: Margs = [ (2,), (3,), (2,3), tuple([])] # don't marg over
+#    elif ndim==4: Margs = [ (2,), (3,), (2,3), tuple([])] # don't marg over
         # erroneous LR
     else: raise Exception(ndim)
 
@@ -653,6 +673,7 @@ def save_final_losses_process(dest):
         if len(s)==1:
             for i in range(arr_shape[s[0]]):
                 print(WhichVaryVals[s[0]][i]+\
+                        #'{0[0]:<15}{0[1]:<15}'.format('')+ \
                         '\tavg  '+'{:1.3f}'.format(MEAN[i])+\
                         '\tmin  '+'{:1.3f}'.format(MINS[i])+\
                         '\tmax  '+'{:1.3f}'.format(MAXS[i]))
@@ -663,7 +684,7 @@ def save_final_losses_process(dest):
 #                '\tmin  '+'{:1.3f}'.format(np.min(MINS[i]))+\
 #                '\tmax  '+'{:1.3f}'.format(np.max(MAXS[i])))
             for j in range(arr_shape[s[1]]):
-                print(str(WhichVaryVals[s[0]][i])+'\t'+str(WhichVaryVals[s[1]][j])+\
+                print(str(WhichVaryVals[s[0]][i])+'  '+str(WhichVaryVals[s[1]][j])+\
                     '\tavg  '+'{:1.3f}'.format(float(MEAN[i,j]))+\
                     '\tmin  '+'{:1.3f}'.format(float(MINS[i,j]))+\
                     '\tmax  '+'{:1.3f}'.format(float(MAXS[i,j])))
@@ -672,11 +693,11 @@ def save_final_losses_process(dest):
           for i in range(arr_shape[s[0]]):
            for j in range(arr_shape[s[1]]):
             for k in range(arr_shape[s[2]]):
-                print(WhichVaryVals[s[0]][i], WhichVaryVals[s[1]][j],\
-                        WhichVaryVals[s[2]][k],\
-                        '\tavg', '{:1.3f}'.format(MEAN[i,j,k]),\
-                        '\tmin', '{:1.3f}'.format(MINS[i,j,k]),\
-                        '\tmax', '{:1.3f}'.format(MAXS[i,j,k]))
+                print(WhichVaryVals[s[0]][i]+'  '+WhichVaryVals[s[1]][j]+'  '+\
+                        WhichVaryVals[s[2]][k]+\
+                        '\tavg '+ '{:1.3f}'.format(MEAN[i,j,k])+\
+                        '\tmin '+ '{:1.3f}'.format(MINS[i,j,k])+\
+                        '\tmax '+ '{:1.3f}'.format(MAXS[i,j,k]))
 
         print('') 
 
