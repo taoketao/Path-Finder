@@ -475,9 +475,10 @@ class network(object):
         if override==None or not 'loss_function' in override:
             return tf.reduce_sum(tf.square( pred - targ ))
         lf = override['loss_function']
-        if lf == 'square':
+        #print('\t'+lf)
+        if lf == 'square' or lf==None:
             return tf.reduce_sum(tf.square( pred - targ ))
-        if lf == 'huber':
+        if 'huber' in lf:
             if len(lf)>5: max_grad = float(lf[5:])
             else: max_grad = DEFAULT_HUBER_SATURATION
 
@@ -609,9 +610,10 @@ class NetworkCollector(object):
 if __name__=='__main__':
     OUT_DIR = './storage/5-04/'
     EXP_DIR = './experiments/5-04/'
-    env = environment_handler2(DUMMY_GRIDSZ)
+    env = environment_handler3(DUMMY_GRIDSZ, action_mode='egocentric')
     print((os.listdir(OUT_DIR)))
-    N1 = network(env, load_weights_path=None)
+    N1 = network(env, load_weights_path=None, net_params = {'fc1_size':24}, \
+            _optimizer_type='sgd')
 
     s = tf.Session()
     s.run(tf.global_variables_initializer())
@@ -620,7 +622,8 @@ if __name__=='__main__':
     N1.save_weights(OUT_DIR, prefix='1')
     l = os.listdir(OUT_DIR)
     print(l)
-    N2 = network(env,load_weights_path=OUT_DIR+l[-1])
+    N2 = network(env,load_weights_path=OUT_DIR+l[-1], net_params = \
+            {'fc1_size':24}, _optimizer_type='sgd'   )
     N1.save_weights(OUT_DIR, prefix='2')
     l = os.listdir(OUT_DIR)
     print(l)
@@ -632,6 +635,6 @@ if __name__=='__main__':
 
     ##################################################
 
-    env = environment_handler2(DUMMY_GRIDSZ, action_mode='slide_worldcentric')
+    env = environment_handler3(DUMMY_GRIDSZ, action_mode='egocentric')
     NC0 = NetworkCollector( {'cv1_size':24} )
     NC1 = NetworkCollector(EXP_DIR)

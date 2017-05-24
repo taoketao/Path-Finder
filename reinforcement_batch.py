@@ -27,6 +27,7 @@ DEFAULT_EPSILON = 0.9
 ALL=-1
 A_LAYER=0
 G_LAYER=1
+VALID_FLAG_PLACEHOLDER=True
 
 
 class session_results(object):
@@ -60,15 +61,12 @@ class session_results(object):
             self._data[(epoch, episode, mode)] = D
 
     def get(self, p1, p2=None, p3=None, batch=True): 
-        #print(p1,p2,p3)
         if p1 in ['train','test'] and p2==None and p3==None:
             return self._get(ALL,ALL,p1)
         if p1 in ['train','test'] and p2 in ['successes'] and p3==None:
             x__ = []
             for X in self._get(ALL,ALL,p1):
                 x__.append(np.array([ 1.0 if x['success'] else 0.0 for x in X]))
-#            print(x__[-1].shape, len(x__))
-#            sys.exit()
             return np.array( x__ )
         if p1 in ['train','test'] and p2 in ['nsteps'] and p3==None:
             return np.array( [[ x['num_a'] for x in X]\
@@ -77,8 +75,6 @@ class session_results(object):
             x__ = []
             for X in self._get(ALL,ALL,p1):
                 x__.append(np.array([ x['loss'] for x in X]))
-#            print(x__[-1].shape, len(x__))
-#            sys.exit()
             return np.array( x__ )
 
             return np.array( [[ x['loss'] for x in X]\
@@ -104,8 +100,6 @@ class session_results(object):
             return [self._get(ep, episode, mode) for ep in range(self.nepochs)]
         if episode == ALL: 
             return [self._get(epoch, ep, mode) for ep in range(self.nepisodes)]
-#        if self.batch:
-#            return self._data[(epoch, mode)].copy()
         return self._data[(epoch, episode, mode)].copy()
 
 
@@ -137,9 +131,14 @@ class reinforcement_b(object):
                 'which # action is this' identifiability.
         ...
     '''
-    def __init__(self, which_game, frame, game_shape, override=None,
+    def __init__(self, which_game, frame, game_shape=None, override=None,
                  load_weights_path=None, data_mode=None, seed=None):
         np.random.seed(seed)
+        if game_shape == None: 
+            if 'v3' in which_game: game_shape = (9,9)
+            if 'v2' in which_game: game_shape = (7,7)
+            if 'v1' in which_game: game_shape = (5,5)
+            if 'v0' in which_game: game_shape = (5,5)
         self.env = environment_handler3(game_shape, frame, world_fill='roll')
         self.sg = state_generator(game_shape)
         self.sg.ingest_component_prefabs(COMPONENTS_LOC)
@@ -175,9 +174,11 @@ class reinforcement_b(object):
             }[which_game]
 
         if 'v2' in which_game:
-            init_states = self.sg.generate_all_states_upto_2away('v2',self.env)
+            if which_game == 'v2-a_fixedloc_eq':
+                init_states = self.sg.generate_all_states_only_2away('v2',self.env)
+            if which_game == 'v2-a_fixedloc_leq':
+                init_states = self.sg.generate_all_states_upto_2away('v2',self.env)
             pdgm = 'v2'
-            #print('\t',len(init_states))
 
         if 'printing'in override and override['printing']==True:
             for i,s in enumerate(init_states):
@@ -191,8 +192,12 @@ class reinforcement_b(object):
         net_params=None
 
         if not override==None:
-            self.max_num_actions = override['max_num_actions'] if \
-                    'max_num_actions' in override else  MAX_NUM_ACTIONS
+            self.mna_type = override['max_num_actions'] if \
+                    'max_num_actions' in override else MAX_NUM_ACTIONS
+
+            self.max_num_actions = self.mna_type if type(self.mna_type)==int \
+                    else int(self.mna_type[:self.mna_type.find('_')])
+
             self.training_epochs = override['nepochs'] if \
                     'nepochs' in override else  MAX_NUM_ACTIONS
         if not 'rotation' in override: override['rotation']=False
@@ -215,6 +220,20 @@ class reinforcement_b(object):
             self.eps_schedule = [1.0]
             for i in range(self.training_epochs):
                 self.eps_schedule.append(self.eps_schedule[-1]*f)
+        self.curriculum = override['curriculum']
+        if self.which_game=='v2-a_fixedloc_leq' and ('linear_anneal' in \
+                self.curriculum or 'upguided' in self.curriculum):
+            self.tasks = {}
+            self.tasks['easy'] = {i:s for i,s in enumerate(self.init_states) \
+                    if '_' in s.name}
+            self.tasks['hard'] = {i:s for i,s in enumerate(self.init_states) \
+                    if not '_' in s.name}
+            self.easy_ids = list(self.tasks['easy'])
+            self.n_easy = len(self.tasks['easy'])
+            self.n_hard = len(self.tasks['hard'])
+            self.minibatchsize = 8
+        else:
+            self.minibatchsize = len(self.init_states)
 
 
         # If load_weights_path==None, then initialize weights fresh&random.
@@ -266,23 +285,24 @@ class reinforcement_b(object):
         self.dev_checks() # raises errors on stubs
         params = self._populate_default_params(params)
         init = tf.global_variables_initializer()
-        sess_config = tf.ConfigProto(inter_op_parallelism_threads=1,\
-                                     intra_op_parallelism_threads=1)
-        if gethostname=='PDP':
-            sess_config.gpu_options.allow_growth = True
+#        sess_config = tf.ConfigProto(inter_op_parallelism_threads=1,\
+#                                     intra_op_parallelism_threads=1)
+
+        sess_config = tf.ConfigProto()       
+        sess_config.gpu_options.allow_growth = True
         sess = tf.Session(config=sess_config)
 
         self.Net.setSess(sess)
         sess.run(init)
         
         episode_results = session_results(self.training_epochs, \
-                len(self.init_states), batch=True)
+                self.minibatchsize, batch=True)
 
         Buff=[]
         last_n_test_losses = []
+        last_n_successes = []
 
         tf.set_random_seed(self.seed)
-        #print(self.training_epochs)
         for epoch in range(self.training_epochs):
             # Save weights
             save_freq = params['saving']['freq']
@@ -290,20 +310,25 @@ class reinforcement_b(object):
                 self.Net.save_weights(params['saving']['dest'], prefix= \
                         'epoch'+str(epoch)+'--')
             # Take pass over data. Todo: batchify here
-            if not self.data_mode == None: 
-                params['present_mode']=self.data_mode
-            if params['present_mode']=='ordered':
-                next_states = self.init_states
-            elif params['present_mode']=='shuffled':
-                next_states = np.random.permutation(self.init_states)
-                #TODO: add more interesting world states?
-            else: raise Exception("No provided or default data mode.")
+            if not (self.curriculum == None or self.curriculum=='uniform'):
+                next_states = self.get_next_states(epoch)
+            else:
+                if not self.data_mode == None: 
+                    params['present_mode']=self.data_mode
+                if params['present_mode']=='ordered':
+                    next_states = [(i,s) for i,s in enumerate(self.init_states)]
+                elif params['present_mode']=='shuffled':
+                    order = np.random.permutation(range(len(self.init_states)))
+                    next_states = [(i,self.init_states[i]) for i in order]
+                    #TODO: add more interesting world states?
+                else: raise Exception("Provided or default data mode not "+\
+                            "implemented or not provided..")
 
             ep_losses = None
             for __mode in ['train', 'test']:
                 num_as, goals, actns, ep_losses = \
                         self._do_batch(next_states, epoch, __mode)
-                for si, s0 in enumerate(next_states):
+                for si, (_,s0) in enumerate(next_states):
                     episode_results.put(epoch, si,  \
                           { 's0': s0, \
                             'num_a': num_as[si], \
@@ -312,20 +337,27 @@ class reinforcement_b(object):
                             'loss': ep_losses[-1], \
                             'mode': __mode })
             ret_te = ep_losses
+            ret_sc = goals
 
             if params['disp_avg_losses'] > 0:
                 last_n_test_losses.append(ret_te)
                 if len(last_n_test_losses) > params['disp_avg_losses']:
                     last_n_test_losses.pop(0)
+                last_n_successes.append(ret_sc)
+                if len(last_n_successes) > params['disp_avg_losses']:
+                    last_n_successes.pop(0)
 
-            if gethostname()=='PDP' and epoch==1000: 
-                call(['nvidia-smi'])
+#            if gethostname()=='PDP' and epoch==1000: 
+#                call(['nvidia-smi'])
 
-            if (epoch%1000==0 and epoch>0) or epoch==params['disp_avg_losses']: 
+            if (epoch%1000==0 and epoch>0) or \
+                    (epoch<=params['disp_avg_losses'] and epoch%5==0): 
                 s = "Epoch #"+str(epoch)+"/"+str(self.training_epochs)
                 s += '\tlast '+str(params['disp_avg_losses'])+' losses'+\
                         ' averaged over all states:'
-                s += str(np.mean(np.array(last_n_test_losses)))
+                s += '  '+str(np.mean(np.array(last_n_test_losses)))
+                s += '  and successes:' 
+                s += '  '+str(np.mean(np.array(last_n_successes)))
                 print(s) # Batch mode!
 
                 if not params['printing']: 
@@ -355,21 +387,77 @@ class reinforcement_b(object):
             return self.eps_schedule[epoch]
         else: raise Exception("Epsilon strategy not implemented")
 
+    def get_next_states(self, epoch):
+        if self.curriculum==None or self.curriculum=='uniform':
+            raise Exception("dev err")
+        curr = self.curriculum.split('_')
+        if not ('linear' in curr and 'anneal' in curr) and not ('upguided' in curr):
+            raise Exception('dev err')
+
+        # data mode: random selection with replacement.
+        n_states = self.n_easy + self.n_hard
+        for c in curr:
+            if c[0]=='e': end_epch = int(c[1:])
+            if c[0]=='b': burn_in  = int(c[1:])
+        if epoch < burn_in:  easy_pct = 1.0
+        elif epoch > end_epch: easy_pct = 0.5 # == hard_p
+        else: easy_pct = 1 - 0.5* (epoch-burn_in)/(end_epch-burn_in)
+        
+        easy_p = min(max(easy_pct,0.0), 1.0)
+        hard_p = min(max( (1-easy_pct), 0.0), 1.0)
+
+        ps = np.array([easy_p if i in self.easy_ids else hard_p \
+                for i in range(n_states)])
+        if 'upguided' in curr:
+#            for i,s in enumerate(self.init_states):
+#                if i<=6: continue
+#                print(i)
+#                self.env.displayGameState(s, True)
+#            # upguided: only keep the up state.
+            ps[:6] = 0
+#            print(ps); sys.exit()
+        ps /= np.sum(ps)
+        #print(['%1.3f' % p for p in ps])
+        selections = np.random.choice(range(n_states), self.minibatchsize, p=ps)
+        return [(i,self.init_states[i]) for i in selections]
+
+    def action_drop(self, epoch):
+        if type(self.mna_type)==int: return False
+        mna_parts = self.mna_type.split('_')
+        if 'anneal' in mna_parts and 'linear' in mna_parts:
+            for m in mna_parts:
+                if m[0]=='e': end_epch = int(m[1:])
+                if m[0]=='b': burn_in  = int(m[1:])
+            # Burn-in: set to 100 by default.
+            thresh = max(min(float(epoch-burn_in)/\
+                    (end_epch-burn_in),1),0)
+            #print(thresh, end=' ')
+            if np.random.rand() < thresh: 
+                return False
+            return True
+        raise Exception("MNA method not recognized: "+self.mna_type)
+
 
     def _do_batch(self, states, epoch, mode, buffer_me=False, printing=False):
         #print("EPISODE"); sys.exit()
         update_buff = []
         nstates = len(states)
         num_a = [0]*nstates
+        mna_cutoffs = [-1]*nstates
         wasGoalReached = [False]*nstates
         if printing: print('\n\n')
-        cur_states = [ [s.copy() for s in states] ]
+        #print([(i,s.name) for i,s in states])
+        cur_state_tups = [ [(i,s.copy()) for i,s in states] ]
+        cur_states = [ [c[1] for c in cur_state_tups[0]] ]
         attempted_actions = -1*np.ones((self.max_num_actions, nstates))
         losses = []
         for nth_action in range(self.max_num_actions):
             for si,s0 in enumerate(cur_states[-1]):
+                if mna_cutoffs[si]>=0: continue
                 if self.env.isGoalReached(s0): 
-                   wasGoalReached[si]=True
+                    wasGoalReached[si]=True
+                elif nth_action>0 and mode=='train' and self.action_drop(epoch):
+                    mna_cutoffs[si] = nth_action # wp, drop actions
                 else:
                     num_a[si] += 1
             Q0_s = self.Net.getQVals(cur_states[-1])
@@ -381,13 +469,13 @@ class reinforcement_b(object):
                 _epsilon = self._get_epsilon(epoch)
                 eps_chs = np.random.rand(nstates)
                 for eps in np.where(eps_chs < _epsilon)[0]:
-                    if wasGoalReached[eps]:
-                        a0_est[eps]=-1; continue
+                    if mna_cutoffs[eps]>= 0:  a0_est[eps]=-2; continue
+                    if wasGoalReached[eps]:  a0_est[eps]=-1; continue
                     eps_chosen[eps]=True
                     a0_est[eps] = np.random.choice(ACTIONS).astype(int)
                 for eps in np.where(eps_chs >= _epsilon)[0]:
-                    if wasGoalReached[eps]:
-                        a0_est[eps]=-1; continue
+                    if mna_cutoffs[eps]>= 0:  a0_est[eps]=-2; continue
+                    if wasGoalReached[eps]:  a0_est[eps]=-1; continue
                     a0_est[eps] = np.argmax(Q0_s[eps,:]).astype(int)
             elif mode=='test':
                 a0_est = np.argmax(Q0_s, axis=1).astype(int)
@@ -398,25 +486,29 @@ class reinforcement_b(object):
             s1_ests = []
             logic_rets = []
             for si,a in np.ndenumerate(a0_est):
-                si = si[0]; a = int(a);
+                si = si[0]
+                a = int(a)
                 s0 = cur_states[-1][si]
-                if a==-1:
+                if a<0:
                     s1_est = s0  
                 else:
                     s1_est = self.env.performActionInMode(s0, a)
                 s1_ests.append(s1_est)
-                tmp = self._stateLogic(s0, Q0_s[si], a, s1_est, a, printing)
-                a0_valid, s1_valid, R, _, valid_flag = tmp
-                logic_rets.append(tmp)
+                if a>=0: 
+                    tmp = self._stateLogic(s0, Q0_s[si], a, s1_est, a, printing)
+                    _,s1_valid,R,_,valid_flag = tmp
+                    logic_rets.append( (s1_valid, R, valid_flag) )
+                else:
+                    logic_rets.append( (s0, NO_REWARD, VALID_FLAG_PLACEHOLDER) )
 
-            s1_valids = [s[1] for s in logic_rets]
+            s1_valids = [s[0] for s in logic_rets]
             Q1_s = self.Net.getQVals(s1_valids)
 
             valid_flags = np.zeros( (nstates,), dtype=bool)
             for i in range(nstates):
-                valid_flag = logic_rets[i][-1]
                 if a0_est[i]>=0:
-                    targ[i,a0_est[i]] = R
+                    targ[i,a0_est[i]] = logic_rets[i][1]
+                    valid_flag = logic_rets[i][2]
                     if valid_flag:
                         targ[i,a0_est[i]] -= GAMMA * np.max(Q1_s[i,:])
                     else:
@@ -428,6 +520,10 @@ class reinforcement_b(object):
             elif not mode=='test': raise Exception(mode)
            
             cur_states.append(s1_valids)
+        #if epoch % 300 < 3 and mode=='test': 
+#        if epoch % 300 < 3: 
+#            print('mnas cutoff at epoch '+str(epoch)+': '\
+#                +str(np.mean(np.array(mna_cutoffs))))
 
 #        print  num_a;print wasGoalReached; print attempted_actions;print losses; print np.mean(losses)
 #        print nth_action, mode, '\n'
@@ -442,7 +538,7 @@ class reinforcement_b(object):
 
 if __name__=='__main__':
     ovr = {'max_num_actions':2, 'learning_rate':1e-4, 'nepochs':1, \
-            'netsize':('fc',24), 'epsilon':0.5, 'loss_function':'huber',\
+            'netsize':('fc',24), 'epsilon':0.5, 'loss_function':'huber10',\
             'gamesize':(7,7), 'optimizer_tup':('adam',1e-6)}
     r = reinforcement_b('v2-a_fixedloc', 'egocentric', override=ovr, \
             game_shape=(7,7), data_mode='ordered')

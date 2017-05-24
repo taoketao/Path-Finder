@@ -45,8 +45,10 @@ class state(object):
         Roughly a 'RESTful' class: access is based around get, post, del, put.
     '''
 
-    def __init__(self, gridsize):
+    def __init__(self, gridsize, name=None):
         self.gridsz = gridsize
+        if name==None: self.name=None
+        else: self.name=name[name.rfind('/')+1:]
         self.sparse = False # coo_matrix format?
         self.grid = np.zeros((self.gridsz[XDIM], self.gridsz[YDIM], \
                 NUM_LAYERS), dtype='float32')
@@ -148,7 +150,7 @@ class state(object):
 
     ''' Return an identical but distinct version of this state object '''
     def copy(self):
-        s_p = state(self.gridsz)
+        s_p = state(self.gridsz, self.name)
         s_p.grid = np.copy(self.grid)
         s_p.a_loc = self.a_loc
         s_p.g_loc = self.g_loc
@@ -236,7 +238,7 @@ class environment_handler3(object):
     '''
     def __init__(self, gridsize, action_mode, \
             default_agent_dir=NORTH, default_world_dir=NORTH,\
-            world_fill='placeholder'):
+            world_fill='roll'):
         self.gridsz = gridsize;
         assert(gridsize[0]==gridsize[1])
         if 'egocentric'==action_mode and not world_fill in ['O','I','roll']:
@@ -255,14 +257,14 @@ class environment_handler3(object):
     def Lft(self): return self._AgentFwd + 3 % 4
     
     ''' Initialize a new state with post_state. '''
-    def post_state(self, parameters, except_init=False):
+    def post_state(self, parameters, except_init=False, name=None):
         '''
         Convention: parameters should be a dict of:
             'agent_loc' = (x,y),  'goal_loc' = (x,y), 'immobiles_locs' in:
             {'borders' which fills only the borders, list of points}, 
             'mobiles_locs' = list of points.
         '''
-        S = state(self.gridsz)
+        S = state(self.gridsz, name)
         S.post_agent(parameters['agent_loc'])
         S.post_goal(parameters['goal_loc'])
         S.post_immobile_blocks(parameters['immobiles_locs'])
@@ -487,9 +489,9 @@ class environment_handler3(object):
                     if c=='G': parameters['goal_loc'] = (x,y)
         self.states = []
         if except_init=='except':
-            return self.post_state(parameters, True)
+            return self.post_state(parameters, True, name=fn[:-4])
         else:
-            return self.post_state(parameters, False)
+            return self.post_state(parameters, False, name=fn[:-4])
 
     ''' Functions for accessing the optimal minimum number of steps required 
     to achieve the goal.  Used for testing. '''
@@ -534,7 +536,7 @@ class state_generator(object):
         v2: Empty map, N steps from goal.   Implemented? N
         v3: ...
     '''
-    def __init__(self, gridsz): 
+    def __init__(self, gridsz=None): 
         # For now, FIX gridsz so that a network architecture need not change
         self.gridsz = gridsz;
         self.state_diffs = {}
@@ -620,7 +622,10 @@ class state_generator(object):
             return self._generate_micro('default_center', env)
     def generate_all_states_upto_2away(self, version, env):
         if version=='v2': 
-            return self._generate_v2('default_center', env)
+            return self._generate_v2('default_center', env, 'leq')
+    def generate_all_states_only_2away(self, version, env):
+        if version=='v2': 
+            return self._generate_v2('default_center', env, 'eq')
 
     def generate_all_states_floatCenter(self, version):pass
     def generate_N_states_fixedCenter(self, version, replacement=False):pass
@@ -771,14 +776,19 @@ class state_generator(object):
                         'nextto', (x,y), (0,1,1), 'param')
                 states.append(env.post_state(sp))
         return states
-    def _generate_v2(self, rootloc, env, Dir=None):
+    # exclusion: 1-away and 2-away (leq), or just 2-away?
+    def _generate_v2(self, rootloc, env, exclusion='leq', Dir=None):
         if Dir==None:
             Dir = './data_files/states/'
         if not rootloc=='default_center':
             raise Exception("rootloc not yet implemented : "+str(rootloc))
         if not env.gridsz==(7,7):
             raise Exception("env gridsz not yet implemented : "+str(env.gridsz))
-        files = [fn for fn in os.listdir(Dir) if '7x7-2away-A' in fn]
+        tag_keep = '7x7-2away-A-'
+        if exclusion=='eq': tag_remove = '7x7-2away-A-_'
+        elif exclusion=='leq': tag_remove = 'sentinel dont remove me'
+        files = [fn for fn in os.listdir(Dir) if tag_keep in fn \
+                and not tag_remove in fn]
         files.sort()
 #        for fn in files:
 #            print(fn[12:-4],)
