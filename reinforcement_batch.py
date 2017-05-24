@@ -221,7 +221,8 @@ class reinforcement_b(object):
             for i in range(self.training_epochs):
                 self.eps_schedule.append(self.eps_schedule[-1]*f)
         self.curriculum = override['curriculum']
-        if self.which_game=='v2-a_fixedloc_leq' and 'linear_anneal' in self.curriculum:
+        if self.which_game=='v2-a_fixedloc_leq' and ('linear_anneal' in \
+                self.curriculum or 'upguided' in self.curriculum):
             self.tasks = {}
             self.tasks['easy'] = {i:s for i,s in enumerate(self.init_states) \
                     if '_' in s.name}
@@ -299,6 +300,7 @@ class reinforcement_b(object):
 
         Buff=[]
         last_n_test_losses = []
+        last_n_successes = []
 
         tf.set_random_seed(self.seed)
         for epoch in range(self.training_epochs):
@@ -335,11 +337,15 @@ class reinforcement_b(object):
                             'loss': ep_losses[-1], \
                             'mode': __mode })
             ret_te = ep_losses
+            ret_sc = goals
 
             if params['disp_avg_losses'] > 0:
                 last_n_test_losses.append(ret_te)
                 if len(last_n_test_losses) > params['disp_avg_losses']:
                     last_n_test_losses.pop(0)
+                last_n_successes.append(ret_sc)
+                if len(last_n_successes) > params['disp_avg_losses']:
+                    last_n_successes.pop(0)
 
 #            if gethostname()=='PDP' and epoch==1000: 
 #                call(['nvidia-smi'])
@@ -349,7 +355,9 @@ class reinforcement_b(object):
                 s = "Epoch #"+str(epoch)+"/"+str(self.training_epochs)
                 s += '\tlast '+str(params['disp_avg_losses'])+' losses'+\
                         ' averaged over all states:'
-                s += str(np.mean(np.array(last_n_test_losses)))
+                s += '  '+str(np.mean(np.array(last_n_test_losses)))
+                s += '  and successes:' 
+                s += '  '+str(np.mean(np.array(last_n_successes)))
                 print(s) # Batch mode!
 
                 if not params['printing']: 
@@ -382,26 +390,36 @@ class reinforcement_b(object):
     def get_next_states(self, epoch):
         if self.curriculum==None or self.curriculum=='uniform':
             raise Exception("dev err")
-        if 'linear_anneal' in self.curriculum:
-            # data mode: random selection with replacement.
-            n_states = self.n_easy + self.n_hard
-            if len(self.curriculum)<=14:
-                easy_pct = 1- epoch/self.training_epochs
-            else:
-                easy_pct = 1- (1-float(self.curriculum[14:]))*epoch/self.training_epochs
-            
-            easy_p = easy_pct 
-            hard_p = (1-easy_pct) 
+        curr = self.curriculum.split('_')
+        if not ('linear' in curr and 'anneal' in curr) and not ('upguided' in curr):
+            raise Exception('dev err')
 
-            ps = np.array([easy_p if i in self.easy_ids else hard_p \
-                    for i in range(n_states)])
-            ps /= np.sum(ps)
-#            print(['%1.3f'% p for p in ps], easy_pct)
-#            if epoch==199:
-#                print(ps)
-#                sys.exit()
-            selections = np.random.choice(range(n_states), self.minibatchsize, p=ps)
-            return [(i,self.init_states[i]) for i in selections]
+        # data mode: random selection with replacement.
+        n_states = self.n_easy + self.n_hard
+        for c in curr:
+            if c[0]=='e': end_epch = int(c[1:])
+            if c[0]=='b': burn_in  = int(c[1:])
+        if epoch < burn_in:  easy_pct = 1.0
+        elif epoch > end_epch: easy_pct = 0.5 # == hard_p
+        else: easy_pct = 1 - 0.5* (epoch-burn_in)/(end_epch-burn_in)
+        
+        easy_p = min(max(easy_pct,0.0), 1.0)
+        hard_p = min(max( (1-easy_pct), 0.0), 1.0)
+
+        ps = np.array([easy_p if i in self.easy_ids else hard_p \
+                for i in range(n_states)])
+        if 'upguided' in curr:
+#            for i,s in enumerate(self.init_states):
+#                if i<=6: continue
+#                print(i)
+#                self.env.displayGameState(s, True)
+#            # upguided: only keep the up state.
+            ps[:6] = 0
+#            print(ps); sys.exit()
+        ps /= np.sum(ps)
+        #print(['%1.3f' % p for p in ps])
+        selections = np.random.choice(range(n_states), self.minibatchsize, p=ps)
+        return [(i,self.init_states[i]) for i in selections]
 
     def action_drop(self, epoch):
         if type(self.mna_type)==int: return False
@@ -411,7 +429,10 @@ class reinforcement_b(object):
                 if m[0]=='e': end_epch = int(m[1:])
                 if m[0]=='b': burn_in  = int(m[1:])
             # Burn-in: set to 100 by default.
-            if np.random.rand() < float(epoch-burn_in)/end_epch: 
+            thresh = max(min(float(epoch-burn_in)/\
+                    (end_epch-burn_in),1),0)
+            #print(thresh, end=' ')
+            if np.random.rand() < thresh: 
                 return False
             return True
         raise Exception("MNA method not recognized: "+self.mna_type)
