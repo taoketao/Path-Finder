@@ -50,23 +50,23 @@ class experiment(object):
     ''' USER-FACING test harness for experiments. 
         Intention is to read experiment files that spell out the parameters,
         but also a capacity '''
-    def __init__(self, mode):
+    def __init__(self, mode, Seed=None):
         self.iterator = 0;
-        self.seed = 42002
+        if not Seed==None:
+            self.seed = Seed
+        else:
+            self.seed = 422
         if mode=='ego-allo-test':
-            self.dest = './storage/5-21/21/'
+            self.dest = './storage/5-23/09/'
             if not os.path.exists(self.dest): os.makedirs(self.dest)
             self.nsamples = 1
             self.curseeds = list(range(self.seed,self.seed+self.nsamples))
             self.no_save = False
             self.fin_logfile = open(get_time_str(self.dest,'fin_logfile')\
                     +'.txt', 'w+',encoding="utf-8")
-            self.tot_logfile = open(get_time_str(self.dest,'tot_logfile')\
-                    +'.txt', 'w+',encoding="utf-8")
             self.run_exp('allo-ego')
 
         self.fin_logfile.close()
-        self.tot_logfile.close()
         if not gethostname()=='PDP':
             call(["open", self.dest])
     def getseed(self): 
@@ -83,19 +83,25 @@ class experiment(object):
         '''------------------'''
         ''' Options to edit: '''
         '''------------------'''
-        _training_epochs = [1000]
-        mnas = ['2_anneal_linear_500']#, '2_anneal_linear', 2]
+        _training_epochs = [5000]
+#        mnas = [ '2_anneal_linear_1500', '2_anneal_linear_4000']
+        #mnas = [ '2_anneal_linear', '2_anneal_linear_500', '2_anneal_linear_1000',2]
+        mnas = [ '2_anneal_linear_e5000_b1500', '2_anneal_linear_e1500_b1500', \
+                 '2_anneal_linear_e5000_b5000', '2_anneal_linear_e1500_b5000' ]
         gameversions = [ 'v2-a_fixedloc_leq' ]
         #gameversions = [ 'v0-a_fixedloc' ]
-        loss_fns = [ 'huber5e-4' ]#,'huber5e-5' ]
-#        curricula = [ 'linear_anneal_5e-1' ] # uniform
-        curricula = [ 'uniform' ] 
-        lrs = [3e-4]
-        epsilons = ['decay_99']
+        loss_fns = [ 'huber1e-5'] #, 'huber5e-5' ]
+        #curricula = [ 'uniform', 'linear_anneal_5e-1', 'linear_anneal_2e-1', 'linear_anneal_8e-1'  ] # uniform
+        curricula = [ 'uniform'] 
+        #lrs = [ 4e-4 ]
+        lrs = [ 3e-4 ]
+        epsilons = [ 8e-1 ]
         optimizers = [ ['adam',1e-7] ] 
         network_sizes = [\
-#                ('fc','fc',64,64),\
+                ('fc',96),\
                 ('fc',64),\
+#                ('fc','fc',32,32),\
+#                ('fc','fc',64,32),\
 #                ('fc','fc','fc',64,64,32),\
 #                ('cv','cv','fc',64,64,32),\
                 ]
@@ -223,8 +229,8 @@ class experiment(object):
                 except: self.fin_logfile.write(s_)
                 s_ = s+' sample #'+str(ri)+' last 30 test accs: '+'\n'+\
                         str(test_results)+'\n'
-                try:    self.tot_logfile.write(unicode(s_))
-                except: self.tot_logfile.write(s_)
+#                try:    self.tot_logfile.write(unicode(s_))
+#                except: self.tot_logfile.write(s_)
             if states==None: 
                 states = results.get('states')
         
@@ -275,8 +281,11 @@ class experiment(object):
 #test_script('v1-oriented', './storage/4-22-17-oriented-gamesize/')
 
 if __name__=='__main__':
-    if len(sys.argv)==1:mode='ego-allo-test'
-    else: mode = sys.argv[1]
-    experiment(mode)
+    mode='ego-allo-test'
+    if len(sys.argv)<3:
+        seed=None
+    else:
+        seed = sys.argv[2]
+    experiment(mode, seed)
 
 print("Done.")

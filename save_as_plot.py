@@ -311,6 +311,8 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
             ax[(0,1)].plot(Te2[:,i], c=darkcolors[i])
     ax[(1,0)].plot(np.mean(Tr, axis=1), c='orange')
     ax[(1,1)].plot(np.mean(Te, axis=1), c='orange')
+    ax[(1,0)].plot([3**-1]*Tr.shape[0], c='green')
+    ax[(1,1)].plot([3**-1]*Tr.shape[0], c='green')
     if twoplots:
         ax[(1,0)].plot(np.mean(Tr2, axis=1), c='black')
         ax[(1,1)].plot(np.mean(Te2, axis=1), c='black')

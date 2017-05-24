@@ -194,8 +194,10 @@ class reinforcement_b(object):
         if not override==None:
             self.mna_type = override['max_num_actions'] if \
                     'max_num_actions' in override else MAX_NUM_ACTIONS
+
             self.max_num_actions = self.mna_type if type(self.mna_type)==int \
                     else int(self.mna_type[:self.mna_type.find('_')])
+
             self.training_epochs = override['nepochs'] if \
                     'nepochs' in override else  MAX_NUM_ACTIONS
         if not 'rotation' in override: override['rotation']=False
@@ -282,10 +284,11 @@ class reinforcement_b(object):
         self.dev_checks() # raises errors on stubs
         params = self._populate_default_params(params)
         init = tf.global_variables_initializer()
-        sess_config = tf.ConfigProto(inter_op_parallelism_threads=1,\
-                                     intra_op_parallelism_threads=1)
-        if gethostname=='PDP':
-            sess_config.gpu_options.allow_growth = True
+#        sess_config = tf.ConfigProto(inter_op_parallelism_threads=1,\
+#                                     intra_op_parallelism_threads=1)
+
+        sess_config = tf.ConfigProto()       
+        sess_config.gpu_options.allow_growth = True
         sess = tf.Session(config=sess_config)
 
         self.Net.setSess(sess)
@@ -402,11 +405,13 @@ class reinforcement_b(object):
 
     def action_drop(self, epoch):
         if type(self.mna_type)==int: return False
-        method = self.mna_type[self.mna_type.find('_')+1:]
-        if 'anneal_linear' in method:
-            if method=='anneal_linear': amt = self.training_epochs
-            else: amt = int(method[14:])
-            if np.random.rand() < float(epoch)/amt: 
+        mna_parts = self.mna_type.split('_')
+        if 'anneal' in mna_parts and 'linear' in mna_parts:
+            for m in mna_parts:
+                if m[0]=='e': end_epch = int(m[1:])
+                if m[0]=='b': burn_in  = int(m[1:])
+            # Burn-in: set to 100 by default.
+            if np.random.rand() < float(epoch-burn_in)/end_epch: 
                 return False
             return True
         raise Exception("MNA method not recognized: "+self.mna_type)
@@ -495,9 +500,9 @@ class reinforcement_b(object):
            
             cur_states.append(s1_valids)
         #if epoch % 300 < 3 and mode=='test': 
-        if epoch % 300 < 3: 
-            print('mnas cutoff at epoch '+str(epoch)+': '\
-                +str(np.mean(np.array(mna_cutoffs))))
+#        if epoch % 300 < 3: 
+#            print('mnas cutoff at epoch '+str(epoch)+': '\
+#                +str(np.mean(np.array(mna_cutoffs))))
 
 #        print  num_a;print wasGoalReached; print attempted_actions;print losses; print np.mean(losses)
 #        print nth_action, mode, '\n'
