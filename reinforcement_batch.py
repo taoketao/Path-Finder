@@ -102,6 +102,124 @@ class session_results(object):
             return [self._get(epoch, ep, mode) for ep in range(self.nepisodes)]
         return self._data[(epoch, episode, mode)].copy()
 
+class Scheduler(object):
+    ''' Scheduler: various modes:
+        - uniform curriculum: each unique state is chosen for batches with the 
+            same probability, for all epochs.
+        - linear_anneal_eX_bY curriculum: the states are sorted into 'easy' and
+            'hard' (currently only implemented for v2-a_fixedloc_leq).  Batches 
+            are chosen uniquely from 'easy' set up until epoch number Y, are 
+            chosen uniformly randomly from either 'easy' or 'hard' after epoch
+            number X, and are linearly annealed in between.
+        - upguided_eX_bY: same as linear_anneal_eX_bY, except 'hard' set is 
+            reduced from all states with a goal 2 away from A to the singleton
+            set with the state where G is 2 up from A.
+        Todo:
+        implement other schemes.
+
+    '''
+
+    DEFAULT_BATCH_SIZE = 12
+
+    def __init__(self, data_mode, which_game, init_states, t_epchs,\
+            override, ):
+        self.data_mode = data_mode
+        self.curriculum = override['curriculum']
+        if not which_game=='v2-a_fixedloc_leq':
+            self.batchsize = len(init_states)
+        else: self.batchsize = DEFAULT_BATCH_SIZE
+        if 'linear_anneal' in curriculum or 'upguided' in curriculum:
+            self.tasks = {}
+            self.tasks['easy'] = {i:s for i,s in enumerate(init_states) \
+                    if '_' in s.name}
+            self.tasks['hard'] = {i:s for i,s in enumerate(init_states) \
+                    if not '_' in s.name}
+            self.easy_ids = list(self.tasks['easy'])
+            self.n_easy = len(self.tasks['easy'])
+            self.n_hard = len(self.tasks['hard'])
+        else:
+            raise Exception("dev err 3")
+        self.training_epochs = t_epchs
+        self.init_states = init_states
+        if 'epsilon' in override:  
+            self.epsilon_exploration = override['epsilon']
+        else:  
+            self.epsilon_exploration = DEFAULT_EPSILON
+        self.curr = self.curriculum.split('_')
+        for c in self.curr:
+            if c[0]=='e': self.curr_end_epch = int(c[1:])
+            if c[0]=='b': self.curr_burn_in  = int(c[1:])
+        self.n_states = self.n_easy + self.n_hard
+
+
+    def getBatchSize(self): return self.batchsize
+
+    def get_next_states(self, epoch):
+        if self.curriculum==None or self.curriculum=='uniform':
+            if self.data_mode=='ordered':
+                return [(i,s) for i,s in enumerate(self.init_states)]
+            if self.data_mode=='shuffled':
+                order = np.random.permutation(range(len(self.init_states)))
+                next_states = [(i,self.init_states[i]) for i in order]
+            raise Exception("dev err 1")
+        if not ('linear' in self.curr and 'anneal' in self.curr) and not\
+                ('upguided' in self.curr): raise Exception('dev err 2')
+
+        # data mode: random selection with replacement.
+        if epoch < self.curr_burn_in:  easy_pct = 1.0
+        elif epoch > self.curr_end_epch: easy_pct = 0.5 # == hard_p
+        else: easy_pct = 1 - 0.5* (epoch-burn_in)/(end_epch-burn_in)
+        
+        easy_p = min(max(easy_pct,0.0), 1.0)
+        hard_p = min(max( (1-easy_pct), 0.0), 1.0)
+
+        ps = np.array([easy_p if i in self.easy_ids else hard_p \
+                for i in range(n_states)])
+
+        if 'upguided' in self.curr:
+#            for i,s in enumerate(self.init_states):
+#                if i<=6: continue
+#                print(i)
+#                self.env.displayGameState(s, True)
+#            # upguided: only keep the up state.
+            ps[:6] = 0
+#            print(ps); sys.exit()
+
+        ps /= np.sum(ps)
+        #print(['%1.3f' % p for p in ps])
+        selections = np.random.choice(range(n_states), self.minibatchsize, p=ps)
+        return [(i,self.init_states[i]) for i in selections]
+
+    def action_drop(self, epoch):
+        if type(self.mna_type)==int: return False
+        mna_parts = self.mna_type.split('_')
+        if 'anneal' in mna_parts and 'linear' in mna_parts:
+            for m in mna_parts:
+                if m[0]=='e': end_epch = int(m[1:])
+                if m[0]=='b': burn_in  = int(m[1:])
+            # Burn-in: set to 100 by default.
+            thresh = max(min(float(epoch-burn_in)/\
+                    (end_epch-burn_in),1),0)
+            #print(thresh, end=' ')
+            if np.random.rand() < thresh: 
+                return False
+            return True
+        raise Exception("MNA method not recognized: "+self.mna_type)
+
+    def _get_epsilon(self, epoch):
+        if type(self.epsilon_exploration)==float:
+            return self.epsilon_exploration
+        elif self.epsilon_exploration=='lindecay':
+            return 1-float(epoch)/self.training_epochs
+        elif self.epsilon_exploration=='1/x':
+            return 1.0/(epoch+1)
+        elif self.epsilon_exploration[:4]=='1/nx':
+            return float(self.epsilon_exploration[4:])/(epoch+1)
+        elif self.epsilon_exploration[:5]=='decay':
+            return self.eps_schedule[epoch]
+        else: raise Exception("Epsilon strategy not implemented")
+
+
 
 ''' reinforcement: class for managing reinforcement training.  Note that 
     the training programs can take extra parameters; these are not to be 
@@ -210,10 +328,6 @@ class reinforcement_b(object):
         if 'optimizer_tup' in override:
             opt = override['optimizer_tup']
         else: opt = ('sgd')
-        if 'epsilon' in override:
-            self.epsilon_exploration = override['epsilon']
-        else:
-            self.epsilon_exploration = DEFAULT_EPSILON
 
         if type(override['epsilon'])==str and override['epsilon'][:5]=='decay':
             f = float('0.'+override['epsilon'][6:])
@@ -221,20 +335,10 @@ class reinforcement_b(object):
             for i in range(self.training_epochs):
                 self.eps_schedule.append(self.eps_schedule[-1]*f)
         self.curriculum = override['curriculum']
-        if self.which_game=='v2-a_fixedloc_leq' and ('linear_anneal' in \
-                self.curriculum or 'upguided' in self.curriculum):
-            self.tasks = {}
-            self.tasks['easy'] = {i:s for i,s in enumerate(self.init_states) \
-                    if '_' in s.name}
-            self.tasks['hard'] = {i:s for i,s in enumerate(self.init_states) \
-                    if not '_' in s.name}
-            self.easy_ids = list(self.tasks['easy'])
-            self.n_easy = len(self.tasks['easy'])
-            self.n_hard = len(self.tasks['hard'])
-            self.minibatchsize = 8
-        else:
-            self.minibatchsize = len(self.init_states)
-
+        
+        self.scheduler = Scheduler(self.data_mode self.which_game, \
+                self.init_states, self.training_epochs, override, )
+        self.minibatchsize = self.scheduler.getBatchSize()
 
         # If load_weights_path==None, then initialize weights fresh&random.
         self.Net = network(self.env, 'NEURAL', override=override, \
@@ -311,7 +415,7 @@ class reinforcement_b(object):
                         'epoch'+str(epoch)+'--')
             # Take pass over data. Todo: batchify here
             if not (self.curriculum == None or self.curriculum=='uniform'):
-                next_states = self.get_next_states(epoch)
+                next_states = self.scheduler.get_next_states(epoch)
             else:
                 if not self.data_mode == None: 
                     params['present_mode']=self.data_mode
@@ -320,7 +424,6 @@ class reinforcement_b(object):
                 elif params['present_mode']=='shuffled':
                     order = np.random.permutation(range(len(self.init_states)))
                     next_states = [(i,self.init_states[i]) for i in order]
-                    #TODO: add more interesting world states?
                 else: raise Exception("Provided or default data mode not "+\
                             "implemented or not provided..")
 
@@ -374,70 +477,6 @@ class reinforcement_b(object):
 
         return episode_results
 
-    def _get_epsilon(self, epoch):
-        if type(self.epsilon_exploration)==float:
-            return self.epsilon_exploration
-        elif self.epsilon_exploration=='lindecay':
-            return 1-float(epoch)/self.training_epochs
-        elif self.epsilon_exploration=='1/x':
-            return 1.0/(epoch+1)
-        elif self.epsilon_exploration[:4]=='1/nx':
-            return float(self.epsilon_exploration[4:])/(epoch+1)
-        elif self.epsilon_exploration[:5]=='decay':
-            return self.eps_schedule[epoch]
-        else: raise Exception("Epsilon strategy not implemented")
-
-    def get_next_states(self, epoch):
-        if self.curriculum==None or self.curriculum=='uniform':
-            raise Exception("dev err")
-        curr = self.curriculum.split('_')
-        if not ('linear' in curr and 'anneal' in curr) and not ('upguided' in curr):
-            raise Exception('dev err')
-
-        # data mode: random selection with replacement.
-        n_states = self.n_easy + self.n_hard
-        for c in curr:
-            if c[0]=='e': end_epch = int(c[1:])
-            if c[0]=='b': burn_in  = int(c[1:])
-        if epoch < burn_in:  easy_pct = 1.0
-        elif epoch > end_epch: easy_pct = 0.5 # == hard_p
-        else: easy_pct = 1 - 0.5* (epoch-burn_in)/(end_epch-burn_in)
-        
-        easy_p = min(max(easy_pct,0.0), 1.0)
-        hard_p = min(max( (1-easy_pct), 0.0), 1.0)
-
-        ps = np.array([easy_p if i in self.easy_ids else hard_p \
-                for i in range(n_states)])
-        if 'upguided' in curr:
-#            for i,s in enumerate(self.init_states):
-#                if i<=6: continue
-#                print(i)
-#                self.env.displayGameState(s, True)
-#            # upguided: only keep the up state.
-            ps[:6] = 0
-#            print(ps); sys.exit()
-        ps /= np.sum(ps)
-        #print(['%1.3f' % p for p in ps])
-        selections = np.random.choice(range(n_states), self.minibatchsize, p=ps)
-        return [(i,self.init_states[i]) for i in selections]
-
-    def action_drop(self, epoch):
-        if type(self.mna_type)==int: return False
-        mna_parts = self.mna_type.split('_')
-        if 'anneal' in mna_parts and 'linear' in mna_parts:
-            for m in mna_parts:
-                if m[0]=='e': end_epch = int(m[1:])
-                if m[0]=='b': burn_in  = int(m[1:])
-            # Burn-in: set to 100 by default.
-            thresh = max(min(float(epoch-burn_in)/\
-                    (end_epch-burn_in),1),0)
-            #print(thresh, end=' ')
-            if np.random.rand() < thresh: 
-                return False
-            return True
-        raise Exception("MNA method not recognized: "+self.mna_type)
-
-
     def _do_batch(self, states, epoch, mode, buffer_me=False, printing=False):
         #print("EPISODE"); sys.exit()
         update_buff = []
@@ -456,7 +495,8 @@ class reinforcement_b(object):
                 if mna_cutoffs[si]>=0: continue
                 if self.env.isGoalReached(s0): 
                     wasGoalReached[si]=True
-                elif nth_action>0 and mode=='train' and self.action_drop(epoch):
+                elif nth_action>0 and mode=='train' and \
+                        self.scheduler.action_drop(epoch):
                     mna_cutoffs[si] = nth_action # wp, drop actions
                 else:
                     num_a[si] += 1
@@ -466,7 +506,7 @@ class reinforcement_b(object):
             a0_est = np.empty( (nstates,), dtype=int )
             # Choose action
             if mode=='train':
-                _epsilon = self._get_epsilon(epoch)
+                _epsilon = self.scheduler.get_epsilon(epoch)
                 eps_chs = np.random.rand(nstates)
                 for eps in np.where(eps_chs < _epsilon)[0]:
                     if mna_cutoffs[eps]>= 0:  a0_est[eps]=-2; continue
