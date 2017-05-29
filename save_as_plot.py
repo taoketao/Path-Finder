@@ -463,7 +463,7 @@ def get_attributes(s_,i):
     while itr<len(sl):
         if 'mna' in sl[itr]:
             attrs['mna'] = 'mna'+sl[itr][3:]
-            while len(attrs['mna'])<25: attrs['mna'] += ' '
+            while len(attrs['mna'])<30: attrs['mna'] += ' '
             itr += 1;continue
         if 'lr' == sl[itr][:2]:
             attrs['lr'] = 'lr'+sl[itr][2:]+'-'+sl[itr+1]
@@ -511,7 +511,7 @@ def get_attributes(s_,i):
             pass#if 'huber' in sl['TODO']: pass
         if 'curr' == sl[itr][:4]:
             attrs['curr'] = sl[itr]
-            while len(attrs['curr'])<15: attrs['curr'] += ' '
+            while len(attrs['curr'])<30: attrs['curr'] += ' '
             itr += 1; continue    
         itr+=1
 
@@ -540,14 +540,17 @@ def save_final_losses_process(dest):
                     tmp_data = []
                     a = a[1:]
                 al = list(a)
-                if len(al)<40:
-                    tmp_data += [int(al[2])]
-                    tmp_data += [int(al[6])]
-                    tmp_data += [int(al[10])]
-                    tmp_data += [int(al[14])]
-                else:
-                    for i in [2+4*j for j in range(12)]:
+#                if len(al)<40:
+#                    tmp_data += [int(al[2])]
+#                    tmp_data += [int(al[6])]
+#                    tmp_data += [int(al[10])]
+#                    tmp_data += [int(al[14])]
+#                else:
+                for i in [2+4*j for j in range(12)]:
+#                    print(len(al), i)
+                    try:
                         tmp_data += [int(al[i])]
+                    except:pass
                 counter += 1.0
                 if ']]' in a:
                     for i in range(4): 
@@ -556,10 +559,11 @@ def save_final_losses_process(dest):
                     data.append(tmp_data)
         DF.close(); #sys.exit()
         datas.append(data)
+    if not len(trials)==len(datas):
+        datas = datas[0]
     D = np.array(datas)
     print D.shape, len(trials), len(datas), len(datas[0])
-    if not len(trials)==len(datas):
-        raise Exception("inconsistency: "+str(len(trials))+';'+str(len(datas)))
+        #raise Exception("inconsistency: "+str(len(trials))+';'+str(len(datas)))
     n_entities = len(datas)
     attributes = []
     for i in range(n_entities):
@@ -601,14 +605,16 @@ def save_final_losses_process(dest):
     #print '\n>>> Differences per trial over each starting state:'
     for i,a in enumerate(attributes):
         index = tuple( WhichVaryValsD[a[hp]] for hp in WhichVary )
-        AvgAccsIsolated [ index ] = np.mean(D[i,:])
-        MinAccsIsolated [ index ] = np.min(D[i,:])
-        MaxAccsIsolated [ index ] = np.max(D[i,:])
-        VarAccsIsolated [ index ] = np.var(D[i,:])**0.5
+        try: d__ = D[i,:]
+        except: d__ = D[i]
+        AvgAccsIsolated [ index ] = np.mean(d__)
+        MinAccsIsolated [ index ] = np.min(d__)
+        MaxAccsIsolated [ index ] = np.max(d__)
+        VarAccsIsolated [ index ] = np.var(d__)**0.5
 
-    print hyperparams; print hp_map; print nversions; print nversc; 
-    print nwhere_ge1; print nz; print arr_shape; print ndim; print WhichVary; 
-    print WhichVaryVals; print WhichVaryValsD;
+#    print hyperparams; print hp_map; print nversions; print nversc; 
+#    print nwhere_ge1; print nz; print arr_shape; print ndim; print WhichVary; 
+#    print WhichVaryVals; print WhichVaryValsD;
 
 
 #        continue
@@ -646,10 +652,11 @@ def save_final_losses_process(dest):
         #Margs = [tuple([])]
         return
     print("\n\nThe following are marginals over certain variables.\n")
+    print(ndim)
     if ndim==1: Margs = [ tuple([])]
-    if ndim==2: Margs = [ (0,), (1,), tuple([])]
-    if ndim==3: Margs = [ (0,), (1,), (2,), (0,2), (1,2), (0,1), tuple([]) ]
-    if ndim==4: Margs = [ (0,), (1,), (2,), (3,), (0,1), (0,2), (1,2),\
+    elif ndim==2: Margs = [ (0,), (1,), tuple([])]
+    elif ndim==3: Margs = [ (0,), (1,), (2,), (0,2), (1,2), (0,1), tuple([]) ]
+    elif ndim==4: Margs = [ (0,), (1,), (2,), (3,), (0,1), (0,2), (1,2),\
          (0,3), (1,3), (2,3), (0,1,2), (0,1,3), (0,2,3), (1,2,3), tuple([])] # ALL
 #    if ndim==4: Margs = [ (0,), (1,), (2,), (3,), (0,1), (0,2), (1,2),\
 #         (0,3), (1,3), (2,3), (0,1,2), (0,1,3), (0,2,3), (1,2,3), tuple([])] # ALL
