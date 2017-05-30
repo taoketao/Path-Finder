@@ -5,6 +5,7 @@ import matplotlib
 matplotlib.use('Agg')
 from matplotlib import gridspec, font_manager
 from math import ceil, floor
+from reinforcement_batch import CurriculumSpecifier
 
 ACTION_NAMES = { 0:"U", 1:'R', 2:"D", 3:'L' } 
 UDIR = 0; RDIR = 1; DDIR = 2; LDIR = 3
@@ -32,6 +33,19 @@ def smooth(arr, smoothing):
         for smth in range(smoothing):
             Arr[i*smoothing+smth,:] = arr_val
     return Arr
+
+
+def display_curriculum_curves(curr, disp_or_save='disp'):
+    ''' Displays a curriculum as object curves for different groups. '''
+    pass
+
+
+
+
+
+
+
+
     
 def save_as_plot1(fns, lr=None, mna=None, nsamples=None, which='l', \
         div=1.0, delete_npy=False, smoothing=20):
@@ -264,7 +278,7 @@ def _make_str(s_id, gridsz, trte, debug=False):
     return s
 
 def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
-        tr2=None, te2=None):
+        tr2=None, te2=None, curr=None, statemap=None):
     if states==None:
         raise Exception()
     #f, ax = plt.subplots(lX*2, lY*2, sharex=True)
@@ -303,7 +317,20 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
             '#ffe6f0','#ffcce0','#ff99c2','#ff66a3','#ff1a75','#e6005c'] # reds
     else: raise Exception(str(Tr.shape))
 
+    if not curr==None: 
+        accessible_states = reduce(set.union, [v for v in curr.groups.values()])
+        grp1_colors_tr = ['#ccccff','#9999ff','#6666ff','#3333ff','#0000cc','#000080'] # blues
+        grp2_colors_tr = ['#ccffff','#80ffff','#00ffff','#00cccc','#009999','#008080'] # cyans
+        grp3_colors_tr = ['#afffa9','#9ae095','#7fb77b','#5e895b','#496b47'] # lightgreens
+        grp1_colors_te = ['#ffcccc','#ff8080','#ff1a1a','#e60000','#cc0000','#990000'] # reds
+        grp2_colors_te = ['#ffe6f0','#ffcce0','#ff99c2','#ff66a3','#ff1a75','#e6005c'] # pinks
+        grp3_colors_te = ['#ffde7a','#ffd145','#ffc000','#dba602','#c19204','#987301'] # oranges
+    else: accessible_states='all'
+
     for i in range(Tr.shape[1]):
+        if not accessible_states=='all':
+            if len(statemap[i]['group'])==0: # ie, no group
+                continue
         ax[(0,0)].plot(Tr[:,i], c=colors[i])
         ax[(0,1)].plot(Te[:,i], c=colors[i])
         if twoplots:
@@ -562,7 +589,7 @@ def save_final_losses_process(dest):
     if not len(trials)==len(datas):
         datas = datas[0]
     D = np.array(datas)
-    print D.shape, len(trials), len(datas), len(datas[0])
+    print(D.shape, len(trials), len(datas), len(datas[0]))
         #raise Exception("inconsistency: "+str(len(trials))+';'+str(len(datas)))
     n_entities = len(datas)
     attributes = []

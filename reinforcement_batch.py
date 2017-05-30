@@ -24,10 +24,14 @@ ACTIONS = [UDIR, RDIR, DDIR, LDIR]
 ACTION_NAMES = { UDIR:"UDIR", DDIR:"DDIR", RDIR:"RDIR", LDIR:"LDIR" }
 P_ACTION_NAMES = { UDIR:"^U^", DDIR:"vDv", RDIR:"R>>", LDIR:"<<L" }
 DEFAULT_EPSILON = 0.9
+DEFAULT_BATCH_SIZE = 12
 ALL=-1
 A_LAYER=0
 G_LAYER=1
+#SCHEDULED_LR_SIGNAL = -23 # some value
 VALID_FLAG_PLACEHOLDER=True
+DEFAULT_TEST_FREQ = 10          # Trials should have >100 epochs
+DEFAULT_DISP_NUM_LOSSES = 10    # Trials should have >100 epochs
 
 
 class session_results(object):
@@ -102,6 +106,179 @@ class session_results(object):
             return [self._get(epoch, ep, mode) for ep in range(self.nepisodes)]
         return self._data[(epoch, episode, mode)].copy()
 
+def CurriculumGenerator(inp, scheme=None):
+    ''' Generates numerous curricula according to a scheme. '''
+    if scheme==None and type(inp)==dict and 'schedule kind' in inp.keys() and \
+            'which ids' in inp.keys(): scheme = 'default'
+
+    def repeat_specs(List, ncopies):
+        newL = [None]*(ncopies*len(List))
+        for i in range(len(List)):
+            for j in range(ncopies):
+                newL[i*ncopies+j] = List[i].copy()
+        return newL
+
+    if scheme=='default':
+        ''' Case: take the input <inp> as a literal dictionary. '''
+        return CurriculumSpecifier(inp)
+    elif scheme == 'cross parameters':
+        curr_specs = [{}]
+        for spec, specvals in inp.items():
+            n_orig = len(curr_specs)
+            if type(specvals)==str:
+                specvals = [specvals]
+            n_vals = len(specvals)
+
+            if n_vals==1:
+                for i in range(n_orig):
+                    curr_specs[i][spec] = specvals[0] 
+                continue
+            curr_specs = repeat_specs(curr_specs, n_vals)
+            for i in range(n_orig):
+                for j in range(n_vals):
+                    curr_specs[i*n_vals + j][spec] = specvals[j]
+        return [CurriculumSpecifier(specs) for specs in curr_specs]
+    else: assert(False)
+
+class CurriculumSpecifier(object):
+    ''' Usage: For each state of state group id (SID), specify (a) the
+        (partial?) ordering of the SIDs and (b) the English schedule for
+        occurrence. Class Scheduler implements which states to actually return.
+        
+    Doc: 
+        dynamic:  is a bool indicating if the curr should respond to training.
+        which ids:  an object that encapsulates which states go to which IDs.
+            Case Xdir: which is a list of states to keep (or a shorthand)
+        schedule kind:  how different groups should be presented: curve shapes.
+        schedule strengths:  what percentages parameterize the groups over epochs.
+            Give schedule-kind-specific float values for each group (or all but 1st)
+            or a keyword such as 'egalitarian', which ends all at the same strength.
+            These can be thought of as FACTORS, ie, unnormalized probabilities.
+        schedule timings:  which epochs to enact the changes
+            Give schedule-kind-specific integer values for each group (or all but 1st)
+        groups: a dict.  Keys are lexically-ordered tuples where X<Y means
+            X will be presented to the network before Y will.
+
+    Accessible fields (do your best not to overwrite them):
+        inp: the original input.  
+        dynamic, which_ids, sched_kind: 'symlinks' to cleaned inp fields
+        groups: a dict of group lexicoIDs to the group's tasks (as strs)
+        nstates: total number of states that are (potentially) ever active 
+        begVal, endVal, begTime, endTime: dicts of group lexicoIDs to their 
+                parameterizations; may be empty depending on curriculum.
+        '''
+    def __init__(self, inp, controller_format='default'):
+        if not controller_format=='default': 
+            raise Exception('input format error')
+        self.inp = inp
+        self.groups = {}
+        assert( type(inp)==dict)
+        for required_key in ['which ids','schedule kind','schedule strengths',\
+                'schedule timings']:
+            if (not required_key in inp.keys() and inp['which ids']=='uniform'):
+                print (inp.keys())
+                raise Exception("Please provide parameters: %s" % required_key)
+        self.dynamic = inp['dynamic'] if 'dynamic' in inp.keys() else False  
+        self.which_ids = which = inp['which ids']
+        if which=='any': which='all'
+        self.groups = {\
+            'all': { (1,): {'_u','_r','_d','_l'}, (2,): {'dl','dr','lu','ru'}, \
+                    (3,): {'uu','dd','ll','rr'} }, \
+            'any1step, u r diag': { (1,): {'_u','_r','_d','_l'}, (2,): {'ru'} }, \
+            'r, u, ru-diag only': { (1,): {'_u','_r'}, (2,): {'ru'} }, \
+            'r or u only': { (1,): {'_u','_r'}, (2,): {'ru'}, (3,): {'rr','uu'} }, \
+            'uu ur': { (1,): {'_l','_d','_u','_r'}, (2,): {'ru'}, (3,): {'uu'} }, \
+            'poles': { (1,): {'_l','_d','_u','_r'}, (2,): {'rr','ll'} }, \
+            'all diag': { (1,): {'_u','_r','_l','_r'}, (2,): {'dl','dr','lu','ru'} },\
+            '1step': { (1,): {'_u','_d','_l','_r'} }, \
+            '1step split': { (1,): {'_u','_d'}, (2,):{'_l','_r'} }, \
+          }[which]
+        self.nstates = { 'any1step, u r diag': 5, 'r, u, ru-diag only': 3, \
+                'r or u only': 5, 'uu ur': 6, 'poles': 6, 'all diag': 8, \
+                'all': 12, '1step': 4, '1step split': 4 }[which]
+            
+        self.sched_kind = sched_kind = inp['schedule kind']
+        if not sched_kind == 'uniform': 
+            if not 'schedule strengths' in inp.keys():
+                raise Exception("Please provide parameters to the schedule.")
+            if not 'schedule timings' in inp.keys():
+                raise Exception("Please provide parameters to the schedule.")
+
+
+        ''' Strengths: What (relative) percentages should each group take?'''
+        if sched_kind == 'uniform':
+            self.begVal = {};  self.endVal = {} 
+            self.begTime = {}; self.endTime = {} 
+            for i in range(len(self.groups)):
+                self.begVal[(i+1,)] = 1.0;    self.endVal[(i+1,)] = 1.0;
+                self.begTime[(i+1,)] = 0;    self.endTime[(i+1,)] = -1;
+            return
+
+
+        begVal = {}; endVal = {} 
+        begTime = {}; endTime = {} 
+        schv = inp['schedule strengths']
+        if type(schv)==str and schv=='egalitarian' and len(self.groups)==2:
+            begVal[(1,)] = 1.0; endVal[(1,)] = 1.0
+            begVal[(2,)] = 0.0; endVal[(2,)] = 1.0
+        elif sched_kind in ['linear anneal', 'no anneal']:
+            if schv=='20-80 flat group 1':
+                begVal[(1,)] = 20.0;   endVal[(1,)] = 20.0;
+                begVal[(2,)] = 0.0;    endVal[(2,)] = 80.0;
+            elif schv=='20-70-10 flat group 1':
+                begVal[(1,)] = 20.0;   endVal[(1,)] = 20.0;
+                begVal[(2,)] = 0.0;    endVal[(2,)] = 70.0;
+                begVal[(3,)] = 0.0;    endVal[(3,)] = 10.0;
+            else:
+                begVal[(1,)] = schv['b0'] if 'b0' in schv else 1.0
+                endVal[(1,)] = schv['e0'] if 'e0' in schv else 1.0
+                begVal[(2,)] = schv['b1'] if 'b1' in schv else 0.0
+                endVal[(2,)] = schv['e1'] if 'e1' in schv else 1.0
+                begVal[(3,)] = schv['b2'] if 'b2' in schv else 0.0
+                endVal[(3,)] = schv['e2'] if 'e2' in schv else 1.0
+        elif sched_kind == 'sigmoid':
+            # Values correspond to logistic sigmoid's temperature
+            begVal[(1,)] = schv['s0'] if 's0' in schv else 1.0
+            begVal[(2,)] = schv['s1'] if 's1' in schv else 1.0
+            begVal[(3,)] = schv['s2'] if 's2' in schv else 1.0
+        else: raise Exception("Schedule value format not recognized.")
+
+        ''' Timings: At what epochs should the schedule kind operate at? '''
+        scht = inp['schedule timings']
+        if sched_kind in ['linear anneal', 'egalitarian']:
+            begTime[(1,)] = scht['b0'] if 'b0' in scht else 0
+            if 'e0' in scht: endTime[(1,)] = scht['e0']
+            if 'b1' in scht: begTime[(2,)] = scht['b1'] 
+            endTime[(2,)] = scht['e1'] if 'e1' in scht else -1 # last epoch
+            if 'b2' in scht: begTime[(3,)] = scht['b2'] 
+            if 'e2' in scht: endTime[(3,)] = scht['e2']
+        elif sched_kind == 'no anneal':
+            begTime[(1,)] = scht['t0'] if 't0' in scht else 0
+            begTime[(2,)] = scht['t1'] if 't1' in scht else 0
+            begTime[(3,)] = scht['t2'] if 't2' in scht else 0
+        elif sched_kind == 'sigmoid':
+            begTime[(1,)] = scht['s0'] if 's0' in scht else 0
+            begTime[(2,)] = scht['s1'] if 's1' in scht else 0
+            begTime[(3,)] = scht['s2'] if 's2' in scht else 0
+        else: raise Exception("Schedule times format not recognized.")
+
+        self.begVal = begVal
+        self.endVal = endVal
+        self.begTime = begTime
+        self.endTime = endTime
+
+    def toString(self):
+        return '\n  '.join(['inp:'+str(self.inp), 'groups:'+str(self.groups), 'begTime:'+str(self.begTime), 'endTime:'+str(self.endTime), 'begVal:'+str(self.begVal), 'endVal:'+str(self.endVal)])
+        s=''
+        s += 'Curriculum: [  schedule kind: '+ self.sched_kind + ',  '
+        s += 'which states (' + self.inp['which ids'] + '): '
+        for g,(vs,bt,et,bv,ev) in enumerate(zip(self.groups, self.begTime,
+                    self.endTime, self.begVal, self.endVal)):
+            s += 'Group '+str(g)+' <'+ ' '.join(str(vs[g])) + '>: '+'schedule ('\
+                +str(bt[g])+','+str(et[g])+') & factors ('+str(bv[g])+','+str(ev[g])+');  '
+        return s
+    
+    
 class Scheduler(object):
     ''' Scheduler: various modes:
         - uniform curriculum: each unique state is chosen for batches with the 
@@ -114,80 +291,176 @@ class Scheduler(object):
         - upguided_eX_bY: same as linear_anneal_eX_bY, except 'hard' set is 
             reduced from all states with a goal 2 away from A to the singleton
             set with the state where G is 2 up from A.
-        Todo:
-        implement other schemes.
+
+        Supported curricula: (provide as 'curr' dict value in override dict)
+            all:                 1: u,r,d,l, 2: dl,dr,lu,ru
+            any1step, u r diag:  1: u,r,d,l, 2: ru
+            r, u, ru-diag only:  1: u,r,     2: ru
+            r or u only:         1: u,r,     2: ru,           3: rr,uu
+            uu ur:               1: l,d,u,r, 2: ru,           3: uu
+            poles:               1: l,d,u,r, 2: rr,ll
+            all diag:            1: u,r,l,r, 2: dl,dr,lu,ru
+            all:                 1: u,r,d,l, 2: dl,dr,lu,ru,  3: dd,ll,rr,uu
+            1step:               1: u,r,d,l
+            1step split:         1: u,r      2: d,l
 
     '''
 
-    DEFAULT_BATCH_SIZE = 12
 
     def __init__(self, data_mode, which_game, init_states, t_epchs,\
-            override, ):
+            override ):
         self.data_mode = data_mode
-        self.curriculum = override['curriculum']
+        self.mna_type = override['max_num_actions'] if \
+                    'max_num_actions' in override else MAX_NUM_ACTIONS
+
+        ''' >>>>    Curriculum schedule setup. '''
+        self.curriculum = override['curriculum'] 
         if not which_game=='v2-a_fixedloc_leq':
-            self.batchsize = len(init_states)
-        else: self.batchsize = DEFAULT_BATCH_SIZE
-        if 'linear_anneal' in curriculum or 'upguided' in curriculum:
+            self.batchsize = max(len(init_states), 4)
+        else: 
+            self.batchsize = DEFAULT_BATCH_SIZE
+        if type(self.curriculum)==str and self.curriculum=='uniform':
+            pass # for now...
+        elif type(self.curriculum)==str and ('linear_anneal' in self.curriculum\
+                or 'upguided' in self.curriculum):
+            print("Note: curriculum [%s] is deprecated." % self.curriculum)
             self.tasks = {}
-            self.tasks['easy'] = {i:s for i,s in enumerate(init_states) \
-                    if '_' in s.name}
-            self.tasks['hard'] = {i:s for i,s in enumerate(init_states) \
-                    if not '_' in s.name}
+            if self.override['curr'] == 'linear_anneal':
+                self.tasks['easy'] = self.tasks[0]
+                self.tasks['hard'] = self.tasks[1]
+                self.easy_ids = list(self.tasks['easy'])
             self.easy_ids = list(self.tasks['easy'])
             self.n_easy = len(self.tasks['easy'])
             self.n_hard = len(self.tasks['hard'])
+        elif type(self.curriculum) == CurriculumSpecifier:
+            if not self.curriculum.sched_kind in ['uniform', 'linear anneal', \
+                    'no anneal']: raise Exception('bad curriculum shaping given.')
+            self.statemap = self.get_lexico(init_states, self.curriculum.groups)
+#            print('statemap:', '; \n\t  '.join([str(stid)+': gr'+str(st['group'])+', state:'+\
+#                    st['state'].name+', lexid: '+st['lex_id'] for stid, st in self.\
+#                    statemap.items()]))
+            # Then, refurbish get_next_states(), the rest of this init, and
+            # the reinforcement process for sampling states.
         else:
             raise Exception("dev err 3")
         self.training_epochs = t_epchs
         self.init_states = init_states
+
+        ''' >>>>    Epsilon scheduling setup. '''
         if 'epsilon' in override:  
             self.epsilon_exploration = override['epsilon']
         else:  
             self.epsilon_exploration = DEFAULT_EPSILON
-        self.curr = self.curriculum.split('_')
-        for c in self.curr:
-            if c[0]=='e': self.curr_end_epch = int(c[1:])
-            if c[0]=='b': self.curr_burn_in  = int(c[1:])
-        self.n_states = self.n_easy + self.n_hard
+        eps_e = self.epsilon_exploration
+        if type(eps_e)==str and eps_e[:5] == 'decay':
+            self.eps_schedule = [1.0]
+            exp = float(eps_e[6:])
+            for i in range(t_epchs):
+                self.eps_schedule.append( self.eps_schedule[-1]*exp )
 
+        ''' >>>>    Learning rate schedule setup. '''
+        param_lr = override['learning_rate']
+        if type(param_lr) in (float, int): self.lr_schedule = param_lr
+        else:
+            if 'one_log_decrease' in param_lr: 
+                self.lr_schedule = {'dependencies':'epoch-only-dependent', \
+                        'kind': 'one_log_decrease', 'init': float(param_lr[10:]),\
+                        }
+        self.adaptive_lr = False if type(self.lr_schedule) in [int, float] else True 
+            
+    
+    ''' State management. '''
+    def get_lexico(self, states, groups):
+        ''' This function returns a list-accessible-formatted dictionary of 
+            states that ease curriculum operations. 
+
+            Returns dict of  {init_state indexed state : -> {'state': state object, 
+                'lex_id': str lex id, 'group': group tup}}
+            '''
+        statemap = {}
+        if not len(states)==12:
+            raise Exception("Lexicograph not yet implemented for these states.")
+        invg = {}
+        for k,V in groups.items():
+            for v in V:
+                invg[v]=k
+        for i, st in enumerate(states):
+            if not st.get_agent_loc()==(3,3) and st.gridsz==(7,7):
+                raise Exception("Lexicograph not yet implemented for these states.")
+            lex_id = self._get_nameid(st, 2)
+            grp = invg[lex_id] if lex_id in invg.keys() else ()
+            statemap[i] = {'state':st, 'lex_id':lex_id, 'group':grp }
+        return statemap
+    def _get_nameid(self, st, minchars): 
+        '''  Lowercase:   _ < d < l < r < u   string inequalities hold. '''
+        ax, ay = st.get_agent_loc(); gx, gy = st.get_goal_loc(); 
+        s = ''.join( ['d' for _ in range(gy-ay)] + ['l' for _ in range(ax-gx)] \
+                   + ['r' for _ in range(gx-ax)] + ['u' for _ in range(ay-gy)] )
+        while len(s)<minchars: s = '_'+s
+        return s
+        
+
+    ''' Learning rate scheduling. '''
+    def learning_rate_signaller(self): 
+        return SCHEDULED_LR_SIGNAL
+    def get_init_lr(self): 
+        if type(self.lr_schedule) in [int, float]: 
+            return self.lr_schedule
+        else: 
+            return self.lr_schedule['init']
+
+    def get_lr(self, epoch=None ):
+        if not self.adaptive_lr: raise Exception
+        if 'epoch-only-dependent' in self.lr_schedule['dependencies']:
+            if self.lr_schedule['kind'] == 'one_log_decrease':
+                return self.lr_schedule['init'] * (10**-epoch/self.training_epoch)
 
     def getBatchSize(self): return self.batchsize
 
+    ''' Curriculum scheduling. '''
     def get_next_states(self, epoch):
-        if self.curriculum==None or self.curriculum=='uniform':
-            if self.data_mode=='ordered':
-                return [(i,s) for i,s in enumerate(self.init_states)]
-            if self.data_mode=='shuffled':
-                order = np.random.permutation(range(len(self.init_states)))
-                next_states = [(i,self.init_states[i]) for i in order]
-            raise Exception("dev err 1")
-        if not ('linear' in self.curr and 'anneal' in self.curr) and not\
-                ('upguided' in self.curr): raise Exception('dev err 2')
+        curr = self.curriculum
+        #print ('\n\n',curr.toString())
+        ps = [0.0]*len(self.init_states)
+        for i in range(len(ps)):
+            my_group = self.statemap[i]['group']
+            if len(my_group)==0:    continue
+            sched_kind = curr.sched_kind
+#            print(i, my_group, self.init_states[i].name, sched_kind, curr.which_ids)
+            if sched_kind == 'sigmoid': raise Exception("Dev: sigm not implemented")
+            try:
+                begT = curr.begTime[my_group]
+                if sched_kind in ["no anneal", 'sigmoid'] or not my_group in \
+                        curr.endTime.keys():
+                    endT = self.training_epochs
+                else:
+                    endT = curr.endTime[my_group] #######
+                begS = curr.begVal[my_group]
+                endS = curr.endVal[my_group]
+            except:
+                raise Exception("Group not logged in this curriculum object: "+\
+                        str(my_group)+'  '+str(sched_kind)+' <'+\
+                        curr.which_ids +'> '+ self.statemap[i]['lex_id']+', -- '+\
+                       ', '.join([str(s) for s in [curr.begVal, curr.endVal, curr.begTime, curr.endTime]]) )
+            #print(i, my_group, begT, endT, begS, endS)
+            if endT<0: endT = self.training_epochs
+            if sched_kind=='uniform':
+                assert(begS==endS)
+                ps[i] = begS;   continue # endT==begT.
+            if epoch <= begT:   ps[i] = begS;   continue
+            elif sched_kind=='no anneal':   ps[i] = endS ; continue
+            if epoch >= endT:   ps[i] = endS;   continue
+            if sched_kind=='no anneal':
+                raise Exception("dev err: epoch should have been caught already.")
+            if sched_kind=='linear anneal':
+                pct = float(epoch-begT) / (endT-begT)
+                ps[i] = pct*begS + (1-pct)*endS
 
-        # data mode: random selection with replacement.
-        if epoch < self.curr_burn_in:  easy_pct = 1.0
-        elif epoch > self.curr_end_epch: easy_pct = 0.5 # == hard_p
-        else: easy_pct = 1 - 0.5* (epoch-burn_in)/(end_epch-burn_in)
-        
-        easy_p = min(max(easy_pct,0.0), 1.0)
-        hard_p = min(max( (1-easy_pct), 0.0), 1.0)
-
-        ps = np.array([easy_p if i in self.easy_ids else hard_p \
-                for i in range(n_states)])
-
-        if 'upguided' in self.curr:
-#            for i,s in enumerate(self.init_states):
-#                if i<=6: continue
-#                print(i)
-#                self.env.displayGameState(s, True)
-#            # upguided: only keep the up state.
-            ps[:6] = 0
-#            print(ps); sys.exit()
-
-        ps /= np.sum(ps)
         #print(['%1.3f' % p for p in ps])
-        selections = np.random.choice(range(n_states), self.minibatchsize, p=ps)
+        if np.sum(ps)==0: raise Exception()
+        ps /= np.sum(ps)
+        selections = np.random.choice(range(len(self.init_states)), \
+                self.batchsize, p=ps)
         return [(i,self.init_states[i]) for i in selections]
 
     def action_drop(self, epoch):
@@ -206,7 +479,7 @@ class Scheduler(object):
             return True
         raise Exception("MNA method not recognized: "+self.mna_type)
 
-    def _get_epsilon(self, epoch):
+    def get_epsilon(self, epoch):
         if type(self.epsilon_exploration)==float:
             return self.epsilon_exploration
         elif self.epsilon_exploration=='lindecay':
@@ -218,6 +491,10 @@ class Scheduler(object):
         elif self.epsilon_exploration[:5]=='decay':
             return self.eps_schedule[epoch]
         else: raise Exception("Epsilon strategy not implemented")
+
+
+
+
 
 
 
@@ -336,8 +613,14 @@ class reinforcement_b(object):
                 self.eps_schedule.append(self.eps_schedule[-1]*f)
         self.curriculum = override['curriculum']
         
-        self.scheduler = Scheduler(self.data_mode self.which_game, \
-                self.init_states, self.training_epochs, override, )
+
+#        for i,ii in enumerate(init_states):
+#            print(i, end='  '); print(ii.get_goal_loc(), ii.get_agent_loc()) 
+#            self.env.displayGameState(ii)
+
+
+        self.scheduler = Scheduler(self.data_mode, self.which_game, \
+                self.init_states, self.training_epochs, override )
         self.minibatchsize = self.scheduler.getBatchSize()
 
         # If load_weights_path==None, then initialize weights fresh&random.
@@ -378,7 +661,9 @@ class reinforcement_b(object):
         if not 'printing' in params:
             params['printing'] = False
         if not 'disp_avg_losses' in params:
-            params['disp_avg_losses'] = 15
+            params['disp_avg_losses'] = DEFAULT_DISP_NUM_LOSSES
+        if not 'test_frequency' in params:
+            params['test_frequency'] = DEFAULT_TEST_FREQ
         return params
 
     ''' RUN_SESSION: like Simple_Train but less 'simple': Handles the 
@@ -407,13 +692,23 @@ class reinforcement_b(object):
         last_n_successes = []
 
         tf.set_random_seed(self.seed)
+
+        self.Net.adjust_lr(self.scheduler.get_init_lr())
+        init_time = time.time()
+        last_test_eps = None 
+
         for epoch in range(self.training_epochs):
             # Save weights
             save_freq = params['saving']['freq']
             if save_freq>=0 and epoch % save_freq==0:
                 self.Net.save_weights(params['saving']['dest'], prefix= \
                         'epoch'+str(epoch)+'--')
-            # Take pass over data. Todo: batchify here
+            # Setup scheduling
+            if self.scheduler.adaptive_lr:
+                if 'epoch-only-dependent' in self.scheduler.lr_schedule:
+                    self.Net.adjust_lr(self.scheduler.get_lr(epoch=epoch))
+
+            # Take pass over data.
             if not (self.curriculum == None or self.curriculum=='uniform'):
                 next_states = self.scheduler.get_next_states(epoch)
             else:
@@ -426,28 +721,41 @@ class reinforcement_b(object):
                     next_states = [(i,self.init_states[i]) for i in order]
                 else: raise Exception("Provided or default data mode not "+\
                             "implemented or not provided..")
+            if not last_test_eps: last_test_eps=[None]*len(next_states)
 
             ep_losses = None
             for __mode in ['train', 'test']:
-                num_as, goals, actns, ep_losses = \
-                        self._do_batch(next_states, epoch, __mode)
-                for si, (_,s0) in enumerate(next_states):
-                    episode_results.put(epoch, si,  \
-                          { 's0': s0, \
-                            'num_a': num_as[si], \
-                            'success': goals[si], \
-                            'attempted_actions': actns[:,si], \
-                            'loss': ep_losses[-1], \
-                            'mode': __mode })
+                if __mode=='test' and epoch>0 and \
+                            not epoch % params['test_frequency']==0:
+                    # Use previously stored test values
+                    for si in range(len(next_states)):
+                        #episode_results.put(epoch, si, episode_results._get(epoch-1,si,'test'))
+                        episode_results.put(epoch, si, last_test_eps[si])
+                else:
+                    num_as, goals, actns, ep_losses = \
+                            self._do_batch(next_states, epoch, __mode)
+                    for si, (_,s0) in enumerate(next_states):
+                        result_info = { 's0': s0, \
+                                        'num_a': num_as[si], \
+                                        'success': goals[si], \
+                                        'attempted_actions': actns[:,si], \
+                                        'loss': ep_losses[-1], \
+                                        'mode': __mode }
+                        if __mode=='test':
+                            last_test_eps[si] = result_info
+                        episode_results.put(epoch, si, result_info)
+
             ret_te = ep_losses
             ret_sc = goals
 
             if params['disp_avg_losses'] > 0:
                 last_n_test_losses.append(ret_te)
-                if len(last_n_test_losses) > params['disp_avg_losses']:
+                if len(last_n_test_losses) > params['disp_avg_losses']\
+                        * params['test_frequency']:
                     last_n_test_losses.pop(0)
                 last_n_successes.append(ret_sc)
-                if len(last_n_successes) > params['disp_avg_losses']:
+                if len(last_n_successes) > params['test_frequency']\
+                        * params['test_frequency']:
                     last_n_successes.pop(0)
 
 #            if gethostname()=='PDP' and epoch==1000: 
@@ -474,7 +782,9 @@ class reinforcement_b(object):
                     print(('\t'+P_ACTION_NAMES[Qvals[wq]['action']]+': ['+\
                             ', '.join(["%1.5f"% p for p in Qvals[wq]['Q']])+\
                             ']; corr?: '+str(int(Qvals[wq]['reward']))))
-
+        t = time.time()-init_time
+        print("Elapsed time in seconds: %i mins, %.3f seconds" % \
+                (t//60), (t % 60)
         return episode_results
 
     def _do_batch(self, states, epoch, mode, buffer_me=False, printing=False):
@@ -560,13 +870,6 @@ class reinforcement_b(object):
             elif not mode=='test': raise Exception(mode)
            
             cur_states.append(s1_valids)
-        #if epoch % 300 < 3 and mode=='test': 
-#        if epoch % 300 < 3: 
-#            print('mnas cutoff at epoch '+str(epoch)+': '\
-#                +str(np.mean(np.array(mna_cutoffs))))
-
-#        print  num_a;print wasGoalReached; print attempted_actions;print losses; print np.mean(losses)
-#        print nth_action, mode, '\n'
         return num_a, wasGoalReached, attempted_actions, losses
         return num_a, wasGoalReached, attempted_actions, np.mean(losses)
     
