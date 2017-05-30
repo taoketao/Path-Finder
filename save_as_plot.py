@@ -278,7 +278,7 @@ def _make_str(s_id, gridsz, trte, debug=False):
     return s
 
 def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
-        tr2=None, te2=None):
+        tr2=None, te2=None, curr=None, statemap=None):
     if states==None:
         raise Exception()
     #f, ax = plt.subplots(lX*2, lY*2, sharex=True)
@@ -317,7 +317,20 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
             '#ffe6f0','#ffcce0','#ff99c2','#ff66a3','#ff1a75','#e6005c'] # reds
     else: raise Exception(str(Tr.shape))
 
+    if not curr==None: 
+        accessible_states = reduce(set.union, [v for v in curr.groups.values()])
+        grp1_colors_tr = ['#ccccff','#9999ff','#6666ff','#3333ff','#0000cc','#000080'] # blues
+        grp2_colors_tr = ['#ccffff','#80ffff','#00ffff','#00cccc','#009999','#008080'] # cyans
+        grp3_colors_tr = ['#afffa9','#9ae095','#7fb77b','#5e895b','#496b47'] # lightgreens
+        grp1_colors_te = ['#ffcccc','#ff8080','#ff1a1a','#e60000','#cc0000','#990000'] # reds
+        grp2_colors_te = ['#ffe6f0','#ffcce0','#ff99c2','#ff66a3','#ff1a75','#e6005c'] # pinks
+        grp3_colors_te = ['#ffde7a','#ffd145','#ffc000','#dba602','#c19204','#987301'] # oranges
+    else: accessible_states='all'
+
     for i in range(Tr.shape[1]):
+        if not accessible_states=='all':
+            if len(statemap[i]['group'])==0: # ie, no group
+                continue
         ax[(0,0)].plot(Tr[:,i], c=colors[i])
         ax[(0,1)].plot(Te[:,i], c=colors[i])
         if twoplots:

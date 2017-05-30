@@ -30,6 +30,8 @@ A_LAYER=0
 G_LAYER=1
 #SCHEDULED_LR_SIGNAL = -23 # some value
 VALID_FLAG_PLACEHOLDER=True
+DEFAULT_TEST_FREQ = 10          # Trials should have >100 epochs
+DEFAULT_DISP_NUM_LOSSES = 10    # Trials should have >100 epochs
 
 
 class session_results(object):
@@ -104,39 +106,37 @@ class session_results(object):
             return [self._get(epoch, ep, mode) for ep in range(self.nepisodes)]
         return self._data[(epoch, episode, mode)].copy()
 
-def CurriculumGenerator(inp, scheme):
+def CurriculumGenerator(inp, scheme=None):
     ''' Generates numerous curricula according to a scheme. '''
+    if scheme==None and type(inp)==dict and 'schedule kind' in inp.keys() and \
+            'which ids' in inp.keys(): scheme = 'default'
+
+    def repeat_specs(List, ncopies):
+        newL = [None]*(ncopies*len(List))
+        for i in range(len(List)):
+            for j in range(ncopies):
+                newL[i*ncopies+j] = List[i].copy()
+        return newL
+
     if scheme=='default':
         ''' Case: take the input <inp> as a literal dictionary. '''
         return CurriculumSpecifier(inp)
     elif scheme == 'cross parameters':
-#        print([len(v) for v in inp.values()])
-#        print(inp.values())
-#        print([len(v) for v in inp.values() if type(v)==list])
-#        sys.exit()
-        curr_specs = [{} for _ in range(np.prod([len(v) for v in inp.values() if type(v)==list]))]
-        curr_specs = [{} for _ in range(np.prod([len(v) for v in inp.values() if type(v)==list]))]
-        factor=1
-        n_curr = len(curr_specs)
+        curr_specs = [{}]
         for spec, specvals in inp.items():
-            orig_len = len(curr_specs)
+            n_orig = len(curr_specs)
             if type(specvals)==str:
                 specvals = [specvals]
             n_vals = len(specvals)
 
-            J = int(n_curr / n_vals)
-            for i in range(n_curr):
-                ftr = i*factor
-                if type(specvals[ftr//J])==dict:
-                    curr_specs[ftr%n_curr + ftr//n_curr][spec] = specvals[i//J].copy()
-                    curr_specs[i][spec] = specvals[i//J].copy()
-                else:
-                    curr_specs[ftr%n_curr + ftr//n_curr][spec] = specvals[i//J][:]
-                    curr_specs[i][spec] = specvals[i//J][:]
-                print(i, J, factor, (i*factor)%n_curr, (i*factor)//n_curr)
-            if n_vals>1: factor *= n_vals
-        for c in curr_specs: print(c)
-        sys.exit()
+            if n_vals==1:
+                for i in range(n_orig):
+                    curr_specs[i][spec] = specvals[0] 
+                continue
+            curr_specs = repeat_specs(curr_specs, n_vals)
+            for i in range(n_orig):
+                for j in range(n_vals):
+                    curr_specs[i*n_vals + j][spec] = specvals[j]
         return [CurriculumSpecifier(specs) for specs in curr_specs]
     else: assert(False)
 
@@ -159,6 +159,13 @@ class CurriculumSpecifier(object):
         groups: a dict.  Keys are lexically-ordered tuples where X<Y means
             X will be presented to the network before Y will.
 
+    Accessible fields (do your best not to overwrite them):
+        inp: the original input.  
+        dynamic, which_ids, sched_kind: 'symlinks' to cleaned inp fields
+        groups: a dict of group lexicoIDs to the group's tasks (as strs)
+        nstates: total number of states that are (potentially) ever active 
+        begVal, endVal, begTime, endTime: dicts of group lexicoIDs to their 
+                parameterizations; may be empty depending on curriculum.
         '''
     def __init__(self, inp, controller_format='default'):
         if not controller_format=='default': 
@@ -365,7 +372,11 @@ class Scheduler(object):
     ''' State management. '''
     def get_lexico(self, states, groups):
         ''' This function returns a list-accessible-formatted dictionary of 
-            states that ease curriculum operations. '''
+            states that ease curriculum operations. 
+
+            Returns dict of  {init_state indexed state : -> {'state': state object, 
+                'lex_id': str lex id, 'group': group tup}}
+            '''
         statemap = {}
         if not len(states)==12:
             raise Exception("Lexicograph not yet implemented for these states.")
@@ -406,7 +417,6 @@ class Scheduler(object):
 
     def getBatchSize(self): return self.batchsize
 
-
     ''' Curriculum scheduling. '''
     def get_next_states(self, epoch):
         curr = self.curriculum
@@ -420,15 +430,18 @@ class Scheduler(object):
             if sched_kind == 'sigmoid': raise Exception("Dev: sigm not implemented")
             try:
                 begT = curr.begTime[my_group]
-                if sched_kind in ["no anneal", 'sigmoid']:
+                if sched_kind in ["no anneal", 'sigmoid'] or not my_group in \
+                        curr.endTime.keys():
                     endT = self.training_epochs
                 else:
-                    endT = curr.endTime[my_group]
+                    endT = curr.endTime[my_group] #######
                 begS = curr.begVal[my_group]
                 endS = curr.endVal[my_group]
             except:
                 raise Exception("Group not logged in this curriculum object: "+\
-                        str(my_group)+'  '+str(sched_kind))
+                        str(my_group)+'  '+str(sched_kind)+' <'+\
+                        curr.which_ids +'> '+ self.statemap[i]['lex_id']+', -- '+\
+                       ', '.join([str(s) for s in [curr.begVal, curr.endVal, curr.begTime, curr.endTime]]) )
             #print(i, my_group, begT, endT, begS, endS)
             if endT<0: endT = self.training_epochs
             if sched_kind=='uniform':
@@ -648,7 +661,9 @@ class reinforcement_b(object):
         if not 'printing' in params:
             params['printing'] = False
         if not 'disp_avg_losses' in params:
-            params['disp_avg_losses'] = 15
+            params['disp_avg_losses'] = DEFAULT_DISP_NUM_LOSSES
+        if not 'test_frequency' in params:
+            params['test_frequency'] = DEFAULT_TEST_FREQ
         return params
 
     ''' RUN_SESSION: like Simple_Train but less 'simple': Handles the 
@@ -679,6 +694,9 @@ class reinforcement_b(object):
         tf.set_random_seed(self.seed)
 
         self.Net.adjust_lr(self.scheduler.get_init_lr())
+        init_time = time.time()
+        last_test_eps = None 
+
         for epoch in range(self.training_epochs):
             # Save weights
             save_freq = params['saving']['freq']
@@ -703,28 +721,41 @@ class reinforcement_b(object):
                     next_states = [(i,self.init_states[i]) for i in order]
                 else: raise Exception("Provided or default data mode not "+\
                             "implemented or not provided..")
+            if not last_test_eps: last_test_eps=[None]*len(next_states)
 
             ep_losses = None
             for __mode in ['train', 'test']:
-                num_as, goals, actns, ep_losses = \
-                        self._do_batch(next_states, epoch, __mode)
-                for si, (_,s0) in enumerate(next_states):
-                    episode_results.put(epoch, si,  \
-                          { 's0': s0, \
-                            'num_a': num_as[si], \
-                            'success': goals[si], \
-                            'attempted_actions': actns[:,si], \
-                            'loss': ep_losses[-1], \
-                            'mode': __mode })
+                if __mode=='test' and epoch>0 and \
+                            not epoch % params['test_frequency']==0:
+                    # Use previously stored test values
+                    for si in range(len(next_states)):
+                        #episode_results.put(epoch, si, episode_results._get(epoch-1,si,'test'))
+                        episode_results.put(epoch, si, last_test_eps[si])
+                else:
+                    num_as, goals, actns, ep_losses = \
+                            self._do_batch(next_states, epoch, __mode)
+                    for si, (_,s0) in enumerate(next_states):
+                        result_info = { 's0': s0, \
+                                        'num_a': num_as[si], \
+                                        'success': goals[si], \
+                                        'attempted_actions': actns[:,si], \
+                                        'loss': ep_losses[-1], \
+                                        'mode': __mode }
+                        if __mode=='test':
+                            last_test_eps[si] = result_info
+                        episode_results.put(epoch, si, result_info)
+
             ret_te = ep_losses
             ret_sc = goals
 
             if params['disp_avg_losses'] > 0:
                 last_n_test_losses.append(ret_te)
-                if len(last_n_test_losses) > params['disp_avg_losses']:
+                if len(last_n_test_losses) > params['disp_avg_losses']\
+                        * params['test_frequency']:
                     last_n_test_losses.pop(0)
                 last_n_successes.append(ret_sc)
-                if len(last_n_successes) > params['disp_avg_losses']:
+                if len(last_n_successes) > params['test_frequency']\
+                        * params['test_frequency']:
                     last_n_successes.pop(0)
 
 #            if gethostname()=='PDP' and epoch==1000: 
@@ -751,7 +782,9 @@ class reinforcement_b(object):
                     print(('\t'+P_ACTION_NAMES[Qvals[wq]['action']]+': ['+\
                             ', '.join(["%1.5f"% p for p in Qvals[wq]['Q']])+\
                             ']; corr?: '+str(int(Qvals[wq]['reward']))))
-
+        t = time.time()-init_time
+        print("Elapsed time in seconds: %i mins, %.3f seconds" % \
+                (t//60), (t % 60)
         return episode_results
 
     def _do_batch(self, states, epoch, mode, buffer_me=False, printing=False):
@@ -837,13 +870,6 @@ class reinforcement_b(object):
             elif not mode=='test': raise Exception(mode)
            
             cur_states.append(s1_valids)
-        #if epoch % 300 < 3 and mode=='test': 
-#        if epoch % 300 < 3: 
-#            print('mnas cutoff at epoch '+str(epoch)+': '\
-#                +str(np.mean(np.array(mna_cutoffs))))
-
-#        print  num_a;print wasGoalReached; print attempted_actions;print losses; print np.mean(losses)
-#        print nth_action, mode, '\n'
         return num_a, wasGoalReached, attempted_actions, losses
         return num_a, wasGoalReached, attempted_actions, np.mean(losses)
     
