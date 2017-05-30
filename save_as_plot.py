@@ -730,10 +730,3 @@ if __name__=='__main__':
                 smoothing=100, centric='egocentric',    tr2=None, te2=None)
     else:
         save_as_plot1(sys.argv[1:])
-    '''
-    try:
-        save_as_plot(sys.argv[1:-3], sys.argv[-3], sys.argv[-2], sys.argv[-1])
-    except:
-        #save_as_plot(sys.argv[1:], sys.argv[-2], sys.argv[-1])
-        save_as_plot1(sys.argv[1:])
-        '''
