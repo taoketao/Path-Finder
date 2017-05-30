@@ -110,17 +110,29 @@ def CurriculumGenerator(inp, scheme):
         ''' Case: take the input <inp> as a literal dictionary. '''
         return CurriculumSpecifier(inp)
     elif scheme == 'cross parameters':
-        curr_specs = [{}]
+#        print([len(v) for v in inp.values()])
+#        print(inp.values())
+#        print([len(v) for v in inp.values() if type(v)==list])
+#        sys.exit()
+        curr_specs = [{} for _ in range(np.prod([len(v) for v in inp.values() if type(v)==list]))]
         for spec, specvals in inp.items():
+            print(spec, specvals)
             orig_len = len(curr_specs)
             if type(specvals)==str:
                 specvals = [specvals]
             n_vals = len(specvals)
 
-            curr_specs = curr_specs * n_vals
-            for i in range(orig_len):
-                for j in range(n_vals):
-                    curr_specs[i*n_vals+j][spec] = specvals[j]
+            J = int(len(curr_specs) / n_vals)
+            print(len(curr_specs),J)
+            for i in range(len(curr_specs)):
+                print(' ',i,i//J, specvals[i//J])
+                if type(specvals[i//J])==dict:
+                    curr_specs[i][spec] = specvals[i//J].copy()
+                else:
+                    curr_specs[i][spec] = specvals[i//J][:]
+        for c in curr_specs:
+            print(c)
+        sys.exit()
         return [CurriculumSpecifier(specs) for specs in curr_specs]
     else: assert(False)
 
@@ -156,7 +168,7 @@ class CurriculumSpecifier(object):
                 print (inp.keys())
                 raise Exception("Please provide parameters: %s" % required_key)
         self.dynamic = inp['dynamic'] if 'dynamic' in inp.keys() else False  
-        which = inp['which ids']
+        self.which_ids = which = inp['which ids']
         if which=='any': which='all'
         self.groups = {\
             'all': { (1,): {'_u','_r','_d','_l'}, (2,): {'dl','dr','lu','ru'}}, \
@@ -165,11 +177,13 @@ class CurriculumSpecifier(object):
             'r or u only': { (1,): {'_u','_r'}, (2,): {'ru'}, (3,): {'rr','uu'} }, \
             'uu ur': { (1,): {'_l','_d','_u','_r'}, (2,): {'ru'}, (3,): {'uu'} }, \
             'poles': { (1,): {'_l','_d','_u','_r'}, (2,): {'rr','ll'} }, \
-            'all diag': { (1,): {'_u','_r','_l','_r'}, (2,): {'dl','dr','lu','ru'} }\
+            'all diag': { (1,): {'_u','_r','_l','_r'}, (2,): {'dl','dr','lu','ru'} },\
+            '1step': { (1,): {'_u','_d','_l','_r'} }, \
+            '1step split': { (1,): {'_u','_d'}, (2,):{'_l','_r'} }, \
           }[which]
         self.nstates = { 'any1step, u r diag': 5, 'r, u, ru-diag only': 3, \
                 'r or u only': 5, 'uu ur': 6, 'poles': 6, 'all diag': 8, \
-                'all': 12  }[which]
+                'all': 12, '1step': 4, '1step split': 4 }[which]
             
         self.sched_kind = sched_kind = inp['schedule kind']
         if not sched_kind == 'uniform': 
@@ -184,8 +198,8 @@ class CurriculumSpecifier(object):
             self.begVal = {};  self.endVal = {} 
             self.begTime = {}; self.endTime = {} 
             for i in range(len(self.groups)):
-                self.begVal[i] = 1.0;    self.endVal[i] = 1.0;
-                self.begTime[i] = 0;    self.endTime[i] = -1;
+                self.begVal[(i+1,)] = 1.0;    self.endVal[(i+1,)] = 1.0;
+                self.begTime[(i+1,)] = 0;    self.endTime[(i+1,)] = -1;
             return
 
 
@@ -193,47 +207,47 @@ class CurriculumSpecifier(object):
         begTime = {}; endTime = {} 
         schv = inp['schedule strengths']
         if type(schv)==str and schv=='egalitarian' and len(self.groups)==2:
-            begVal[0] = 0.0; endVal[0] = 1.0
-            begVal[1] = 0.0; endVal[1] = 1.0
+            begVal[(1,)] = 0.0; endVal[(1,)] = 1.0
+            begVal[(2,)] = 0.0; endVal[(2,)] = 1.0
         elif sched_kind in ['linear anneal', 'no anneal']:
             if schv=='20-80 flat group 1':
-                begVal[0] = 20.0;   endVal[0] = 20.0;
-                begVal[1] = 0.0;    endVal[0] = 80.0;
+                begVal[(1,)] = 20.0;   endVal[(1,)] = 20.0;
+                begVal[(2,)] = 0.0;    endVal[(2,)] = 80.0;
             elif schv=='20-70-10 flat group 1':
-                begVal[0] = 20.0;   endVal[0] = 20.0;
-                begVal[1] = 0.0;    endVal[0] = 70.0;
-                begVal[1] = 0.0;    endVal[0] = 10.0;
+                begVal[(1,)] = 20.0;   endVal[(1,)] = 20.0;
+                begVal[(2,)] = 0.0;    endVal[(2,)] = 70.0;
+                begVal[(3,)] = 0.0;    endVal[(3,)] = 10.0;
             else:
-                begVal[0] = schv['b0'] if 'b0' in schv else 0.0
-                endVal[0] = schv['e0'] if 'e0' in schv else 1.0
-                begVal[1] = schv['b1'] if 'b1' in schv else 0.0
-                endVal[1] = schv['e1'] if 'e1' in schv else 1.0
-                begVal[2] = schv['b2'] if 'b2' in schv else 0.0
-                endVal[2] = schv['e2'] if 'e2' in schv else 1.0
+                begVal[(1,)] = schv['b0'] if 'b0' in schv else 0.0
+                endVal[(1,)] = schv['e0'] if 'e0' in schv else 1.0
+                begVal[(2,)] = schv['b1'] if 'b1' in schv else 0.0
+                endVal[(2,)] = schv['e1'] if 'e1' in schv else 1.0
+                begVal[(3,)] = schv['b2'] if 'b2' in schv else 0.0
+                endVal[(3,)] = schv['e2'] if 'e2' in schv else 1.0
         elif sched_kind == 'sigmoid':
             # Values correspond to logistic sigmoid's temperature
-            begVal[0] = schv['s0'] if 's0' in schv else 1.0
-            begVal[1] = schv['s1'] if 's1' in schv else 1.0
-            begVal[2] = schv['s2'] if 's2' in schv else 1.0
+            begVal[(1,)] = schv['s0'] if 's0' in schv else 1.0
+            begVal[(2,)] = schv['s1'] if 's1' in schv else 1.0
+            begVal[(3,)] = schv['s2'] if 's2' in schv else 1.0
         else: raise Exception("Schedule value format not recognized.")
 
         ''' Timings: At what epochs should the schedule kind operate at? '''
         scht = inp['schedule timings']
         if sched_kind in ['linear anneal', 'egalitarian']:
-            begTime[0] = scht['b0'] if 'b0' in scht else 0
-            if 'e0' in scht: endTime[0] = scht['e0']
-            if 'b1' in scht: begTime[1] = scht['b1'] 
-            endTime[1] = scht['e1'] if 'e1' in scht else -1 # last epoch
-            if 'b2' in scht: begTime[2] = scht['b2'] 
-            if 'e2' in scht: endTime[2] = scht['e2']
+            begTime[(1,)] = scht['b0'] if 'b0' in scht else 0
+            if 'e0' in scht: endTime[(1,)] = scht['e0']
+            if 'b1' in scht: begTime[(2,)] = scht['b1'] 
+            endTime[(2,)] = scht['e1'] if 'e1' in scht else -1 # last epoch
+            if 'b2' in scht: begTime[(3,)] = scht['b2'] 
+            if 'e2' in scht: endTime[(3,)] = scht['e2']
         elif sched_kind == 'no anneal':
-            begTime[0] = scht['t0'] if 't0' in scht else 0
-            begTime[1] = scht['t1'] if 't1' in scht else 0
-            begTime[2] = scht['t2'] if 't2' in scht else 0
+            begTime[(1,)] = scht['t0'] if 't0' in scht else 0
+            begTime[(2,)] = scht['t1'] if 't1' in scht else 0
+            begTime[(3,)] = scht['t2'] if 't2' in scht else 0
         elif sched_kind == 'sigmoid':
-            begTime[0] = scht['s0'] if 's0' in scht else 0
-            begTime[1] = scht['s1'] if 's1' in scht else 0
-            begTime[2] = scht['s2'] if 's2' in scht else 0
+            begTime[(1,)] = scht['s0'] if 's0' in scht else 0
+            begTime[(2,)] = scht['s1'] if 's1' in scht else 0
+            begTime[(3,)] = scht['s2'] if 's2' in scht else 0
         else: raise Exception("Schedule times format not recognized.")
 
         self.begVal = begVal
@@ -242,13 +256,14 @@ class CurriculumSpecifier(object):
         self.endTime = endTime
 
     def toString(self):
+        return '\n  '.join(['inp:'+str(self.inp), 'groups:'+str(self.groups), 'begTime:'+str(self.begTime), 'endTime:'+str(self.endTime), 'begVal:'+str(self.begVal), 'endVal:'+str(self.endVal)])
         s=''
         s += 'Curriculum: [  schedule kind: '+ self.sched_kind + ',  '
         s += 'which states (' + self.inp['which ids'] + '): '
         for g,(vs,bt,et,bv,ev) in enumerate(zip(self.groups, self.begTime,
                     self.endTime, self.begVal, self.endVal)):
-            s += 'Group '+str(g)+' <'+ ' '.join(str(vs)) + '>: '+'schedule ('\
-                +str(bt)+','+str(et)+') & factors ('+str(bv)+','+str(ev)+');  '
+            s += 'Group '+str(g)+' <'+ ' '.join(str(vs[g])) + '>: '+'schedule ('\
+                +str(bt[g])+','+str(et[g])+') & factors ('+str(bv[g])+','+str(ev[g])+');  '
         return s
     
     
@@ -274,6 +289,8 @@ class Scheduler(object):
             poles:               1: l,d,u,r, 2: rr,ll
             all diag:            1: u,r,l,r, 2: dl,dr,lu,ru
             all:                 1: u,r,d,l, 2: dl,dr,lu,ru,  3: dd,ll,rr,uu
+            1step:               1: u,r,d,l
+            1step split:         1: u,r      2: d,l
 
     '''
 
@@ -281,11 +298,13 @@ class Scheduler(object):
     def __init__(self, data_mode, which_game, init_states, t_epchs,\
             override ):
         self.data_mode = data_mode
+        self.mna_type = override['max_num_actions'] if \
+                    'max_num_actions' in override else MAX_NUM_ACTIONS
 
         ''' >>>>    Curriculum schedule setup. '''
         self.curriculum = override['curriculum'] 
         if not which_game=='v2-a_fixedloc_leq':
-            self.batchsize = len(init_states)
+            self.batchsize = max(len(init_states), 4)
         else: 
             self.batchsize = DEFAULT_BATCH_SIZE
         if type(self.curriculum)==str and self.curriculum=='uniform':
@@ -305,10 +324,9 @@ class Scheduler(object):
             if not self.curriculum.sched_kind in ['uniform', 'linear anneal', \
                     'no anneal']: raise Exception('bad curriculum shaping given.')
             self.statemap = self.get_lexico(init_states, self.curriculum.groups)
-            print('statemap:', '; \n\t  '.join([str(stid)+': gr'+str(st['group'])+', state:'+\
-                    st['state'].name+', lexid: '+st['lex_id'] for stid, st in self.\
-                    statemap.items()]))
-            sys.exit()
+#            print('statemap:', '; \n\t  '.join([str(stid)+': gr'+str(st['group'])+', state:'+\
+#                    st['state'].name+', lexid: '+st['lex_id'] for stid, st in self.\
+#                    statemap.items()]))
             # Then, refurbish get_next_states(), the rest of this init, and
             # the reinforcement process for sampling states.
         else:
@@ -321,6 +339,12 @@ class Scheduler(object):
             self.epsilon_exploration = override['epsilon']
         else:  
             self.epsilon_exploration = DEFAULT_EPSILON
+        eps_e = self.epsilon_exploration
+        if type(eps_e)==str and eps_e[:5] == 'decay':
+            self.eps_schedule = [1.0]
+            exp = float(eps_e[6:])
+            for i in range(t_epchs):
+                self.eps_schedule.append( self.eps_schedule[-1]*exp )
 
         ''' >>>>    Learning rate schedule setup. '''
         param_lr = override['learning_rate']
@@ -348,9 +372,8 @@ class Scheduler(object):
             if not st.get_agent_loc()==(3,3) and st.gridsz==(7,7):
                 raise Exception("Lexicograph not yet implemented for these states.")
             lex_id = self._get_nameid(st, 2)
-            grp = invg[lex_id] if lex_id in invg.keys() else -1
+            grp = invg[lex_id] if lex_id in invg.keys() else ()
             statemap[i] = {'state':st, 'lex_id':lex_id, 'group':grp }
-        #print (invg,i,statemap[i]); sys.exit()
         return statemap
     def _get_nameid(self, st, minchars): 
         '''  Lowercase:   _ < d < l < r < u   string inequalities hold. '''
@@ -360,7 +383,6 @@ class Scheduler(object):
         while len(s)<minchars: s = '_'+s
         return s
         
-
 
     ''' Learning rate scheduling. '''
     def learning_rate_signaller(self): 
@@ -382,48 +404,44 @@ class Scheduler(object):
 
     ''' Curriculum scheduling. '''
     def get_next_states(self, epoch):
+        curr = self.curriculum
+        #print ('\n\n',curr.toString())
+        ps = [0.0]*len(self.init_states)
+        for i in range(len(ps)):
+            my_group = self.statemap[i]['group']
+            if len(my_group)==0:    continue
+            sched_kind = curr.sched_kind
+            #print(my_group, self.init_states[i].name, sched_kind, curr.which_ids)
+            if sched_kind == 'sigmoid': raise Exception("Dev: sigm not implemented")
+            try:
+                begT = curr.begTime[my_group]
+                if sched_kind in ["no anneal", 'sigmoid']:
+                    endT = self.training_epochs
+                else:
+                    endT = curr.endTime[my_group]
+                begS = curr.begVal[my_group]
+                endS = curr.endVal[my_group]
+            except:
+                raise Exception("Group not logged in this curriculum object: "+\
+                        str(my_group)+'  '+str(sched_kind))
+            if endT<0: endT = self.training_epochs
+            if sched_kind=='uniform':
+                assert(begS==endS)
+                ps[i] = begS;   continue # endT==begT.
+            if epoch <= begT:   ps[i] = begS;   continue
+            elif sched_kind=='no anneal':   ps[i] = endS ; continue
+            if epoch >= endT:   ps[i] = endS;   continue
+            if sched_kind=='no anneal':
+                raise Exception("dev err: epoch should have been caught already.")
+            if sched_kind=='linear anneal':
+                pct = float(epoch-begT) / (endT-begT)
+                ps[i] = pct*begS + (1-pct)*endS
 
-
-
-
-
-
-        if self.curriculum==None or self.curriculum=='uniform':
-            if self.data_mode=='ordered':
-                return [(i,s) for i,s in enumerate(self.init_states)]
-            if self.data_mode=='shuffled':
-                order = np.random.permutation(range(len(self.init_states)))
-                next_states = [(i,self.init_states[i]) for i in order]
-            raise Exception("dev err 1")
-        if not ('linear' in self.curr and 'anneal' in self.curr) and not\
-                ('upguided' in self.curr): raise Exception('dev err 2')
-
-
-    
-
-        # data mode: random selection with replacement.
-        if epoch < self.curr_burn_in:  easy_pct = 1.0
-        elif epoch > self.curr_end_epch: easy_pct = 0.5 # == hard_p
-        else: easy_pct = 1 - 0.5* (epoch-burn_in)/(end_epch-burn_in)
-        
-        easy_p = min(max(easy_pct,0.0), 1.0)
-        hard_p = min(max( (1-easy_pct), 0.0), 1.0)
-
-        ps = np.array([easy_p if i in self.easy_ids else hard_p \
-                for i in range(self.n_states)])
-
-        if 'upguided' in self.curr:
-#            for i,s in enumerate(self.init_states):
-#                if i<=6: continue
-#                print(i)
-#                self.env.displayGameState(s, True)
-#            # upguided: only keep the up state.
-            ps[:6] = 0
-#            print(ps); sys.exit()
-
-        ps /= np.sum(ps)
         #print(['%1.3f' % p for p in ps])
-        selections = np.random.choice(range(n_states), self.minibatchsize, p=ps)
+        if np.sum(ps)==0: raise Exception()
+        ps /= np.sum(ps)
+        selections = np.random.choice(range(len(self.init_states)), \
+                self.batchsize, p=ps)
         return [(i,self.init_states[i]) for i in selections]
 
     def action_drop(self, epoch):
@@ -442,7 +460,7 @@ class Scheduler(object):
             return True
         raise Exception("MNA method not recognized: "+self.mna_type)
 
-    def _get_epsilon(self, epoch):
+    def get_epsilon(self, epoch):
         if type(self.epsilon_exploration)==float:
             return self.epsilon_exploration
         elif self.epsilon_exploration=='lindecay':
@@ -577,9 +595,9 @@ class reinforcement_b(object):
         self.curriculum = override['curriculum']
         
 
-        for i,ii in enumerate(init_states):
-            print(i, end='  '); print(ii.get_goal_loc(), ii.get_agent_loc()) 
-            self.env.displayGameState(ii)
+#        for i,ii in enumerate(init_states):
+#            print(i, end='  '); print(ii.get_goal_loc(), ii.get_agent_loc()) 
+#            self.env.displayGameState(ii)
 
 
         self.scheduler = Scheduler(self.data_mode, self.which_game, \
@@ -653,6 +671,8 @@ class reinforcement_b(object):
         last_n_successes = []
 
         tf.set_random_seed(self.seed)
+
+        self.Net.adjust_lr(self.scheduler.get_init_lr())
         for epoch in range(self.training_epochs):
             # Save weights
             save_freq = params['saving']['freq']
