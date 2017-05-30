@@ -5,6 +5,7 @@ import matplotlib
 matplotlib.use('Agg')
 from matplotlib import gridspec, font_manager
 from math import ceil, floor
+from reinforcement_batch import CurriculumSpecifier
 
 ACTION_NAMES = { 0:"U", 1:'R', 2:"D", 3:'L' } 
 UDIR = 0; RDIR = 1; DDIR = 2; LDIR = 3
@@ -32,6 +33,19 @@ def smooth(arr, smoothing):
         for smth in range(smoothing):
             Arr[i*smoothing+smth,:] = arr_val
     return Arr
+
+
+def display_curriculum_curves(curr, disp_or_save='disp'):
+    ''' Displays a curriculum as object curves for different groups. '''
+    pass
+
+
+
+
+
+
+
+
     
 def save_as_plot1(fns, lr=None, mna=None, nsamples=None, which='l', \
         div=1.0, delete_npy=False, smoothing=20):
@@ -562,7 +576,7 @@ def save_final_losses_process(dest):
     if not len(trials)==len(datas):
         datas = datas[0]
     D = np.array(datas)
-    print D.shape, len(trials), len(datas), len(datas[0])
+    print(D.shape, len(trials), len(datas), len(datas[0]))
         #raise Exception("inconsistency: "+str(len(trials))+';'+str(len(datas)))
     n_entities = len(datas)
     attributes = []

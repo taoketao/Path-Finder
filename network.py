@@ -25,6 +25,7 @@ P_ACTION_NAMES = { UDIR:"^U^", DDIR:"vDv", RDIR:"R>>", LDIR:"<<L" }
 N_LAYERS = 4
 LAYER_NAMES = { 0:"Agent", 1:"Goal", 2:"Immobiles", 3:"Mobiles" }
 DUMMY_GRIDSZ = (5,5)
+SCHEDULED_LR_SIGNAL = -23 # match to 
 
 ''' [Default] Hyper parameters '''
 TRAINING_EPISODES = 300;  # ... like an epoch
@@ -85,7 +86,8 @@ class network(object):
         _optimizer_type: one of ('sgd'), ('adam', <eps>),.. for now. '''
     def __init__(self, _env, _version="NEURAL", _batch_off=True, _train=True,\
             _optimizer_type=None, override=None, load_weights_path=None, \
-            rot=False, _game_version='v1', net_params=None, seed=None):
+            rot=False, _game_version='v1', net_params=None, seed=None,
+            scheduler=None):
         ''' inputs: shape [batch, X, Y, 4-action-layers]. '''
         self._train = _train
         self.gridsz = _env.getGridSize()
@@ -95,10 +97,11 @@ class network(object):
         self.game_version = _game_version
         self.rot=rot;
         self.net_params = net_params
-        if not override==None and 'learning_rate' in override:
+        self.scheduler=scheduler
+        if not scheduler==None:
+            self.learning_rate = scheduler.learning_rate_signaller()
+        elif not override==None and 'learning_rate' in override:
             self.learning_rate = override['learning_rate']
-        else:
-            self.learning_rate = LEARNING_RATE
         self.layer_types = list(net_params.keys())
 
         if not seed==None:
@@ -201,15 +204,24 @@ class network(object):
 
         if _optimizer_type==None:
             raise Exception("Please provide which optimizer.")
+
+        if self.learning_rate == SCHEDULED_LR_SIGNAL:
+            self.lr_var = tf.Variable(self.scheduler.get_init_lr())
+        else: 
+            self.lr_var = tf.constant(self.learning_rate)
+
         if _optimizer_type[0]=='sgd':
-            self.optimizer = tf.train.GradientDescentOptimizer(\
-                    self.learning_rate)
+            self.optimizer = tf.train.GradientDescentOptimizer(self.lr_var)
         elif _optimizer_type[0]=='adam':
-            self.optimizer = tf.train.AdamOptimizer(self.learning_rate, \
-                    epsilon=_optimizer_type[1])
+            self.optimizer = tf.train.AdamOptimizer(self.lr_var, \
+                    epsilon = _optimizer_type[1])
         self.updates = self.optimizer.minimize(self.loss_op_updating)
  
         self.sess = None
+
+    def adjust_lr(self, new_val):
+        if self.learning_rate == SCHEDULED_LR_SIGNAL: raise Exception('lr sched')
+        self._cur_lr = new_val
 
     def _construct_2conv_2fc_network(self, load_weights_path, _train, \
                     _optimizer_type):
@@ -550,13 +562,17 @@ class network(object):
         if self.version=='NEURAL':
             targs = np.array(targ_list, ndmin=2)
             s0s = np.array([s.grid for s in orig_states])
-#            return self.sess.run([self.loss_op_updating, self.updates], feed_dict=\
-#                    {self.targ_var: targs, self.input_layer: s0s} )[0]
-#            print(self.sess.run([self.loss_op_updating, self.updates], feed_dict=\
-#                    {self.targ_var: targs, self.input_layer: s0s} ))
-#            sys.exit()
-            return self.sess.run([self.loss_op_updating, self.updates], feed_dict=\
-                    {self.targ_var: targs, self.input_layer: s0s} )[0]
+            if self.learning_rate == SCHEDULED_LR_SIGNAL:
+                return self.sess.run([self.loss_op_updating, self.updates], \
+                        feed_dict={\
+                            self.targ_var: targs, \
+                            self.input_layer: s0s       } )[0]
+            else:
+                return self.sess.run([self.loss_op_updating, self.updates], \
+                        feed_dict={\
+                            self.targ_var: targs, \
+                            self.input_layer: s0s, \
+                            self.lr_var: self._cur_lr   } )[0]
         else:
             raise Exception("Network version not set to NEURAL; cannot update")
         print("Flag 99")

@@ -13,6 +13,8 @@ from io import open
 
 from save_as_plot import *
 from reinforcement_batch import reinforcement_b
+from reinforcement_batch import CurriculumSpecifier 
+from reinforcement_batch import CurriculumGenerator 
 
 
 ''' [Helper] Constants '''
@@ -57,7 +59,7 @@ class experiment(object):
         else:
             self.seed = 422
         if mode=='ego-allo-test':
-            self.dest = './storage/5-23/17/'
+            self.dest = './storage/5-28/dev-0/'
             if not os.path.exists(self.dest): os.makedirs(self.dest)
             self.nsamples = 1
             self.curseeds = list(range(self.seed,self.seed+self.nsamples))
@@ -83,24 +85,42 @@ class experiment(object):
         '''------------------'''
         ''' Options to edit: '''
         '''------------------'''
-        _training_epochs = [4000]
+        _training_epochs = [3000]
         #mnas = [ '2_anneal_linear', '2_anneal_linear_500', '2_anneal_linear_1000',2]
 #        mnas = [ '2_anneal_linear_e5000_b300', '2_anneal_linear_e1500_b300', \
 #                 '2_anneal_linear_e5000_b0', '2_anneal_linear_e1500_b0' ]
         mnas = ['2_anneal_linear_b500_e1000'] #, '2_anneal_linear_b500_e501','2_anneal_linear_b1000_e1001' ]
         gameversions = [ 'v2-a_fixedloc_leq' ]
         #gameversions = [ 'v0-a_fixedloc' ]
-        loss_fns = [ 'huber1e-5' ]
+        loss_fns = [ 'huber1e-3' ]
         #curricula = [ 'linear_anneal_b500_e501'] #,'linear_anneal_b1000_e1001' ]
-        curricula = [ 'upguided_b500_e1000', 'linear_anneal_b500_e1000' ]
+        #curricula = [ 'upguided_b500_e1000'] #, 'linear_anneal_b500_e1000' ]
+
+
+        curricula_part0 = [ CurriculumSpecifier( \
+                        { 'schedule kind':'uniform', 'which ids': 'r or u only' } ) ]
+        curricula_part1 = CurriculumGenerator( scheme='cross parameters', inp={\
+                    'schedule kind': 'no anneal', 'which ids':'r or u only', \
+                    'schedule strengths': ['20-80 flat group 1', 'egalitarian'], \
+                    'schedule timings': [{'t1':500}, {'t1':1000}] } )
+        curricula_part2 = CurriculumGenerator( scheme='cross parameters', inp={\
+                    'schedule kind': 'linear anneal', 'which ids':'r or u only', \
+                    'schedule strengths': ['20-80 flat group 1', 'egalitarian'], \
+                    'schedule timings': [{'b1':0, 'e1':250}, {'b1':0, 'e1':500},\
+                        {'b1':0, 'e1':1000}, {'b1':250, 'e1':500}, \
+                        {'b1':250, 'e1':1000}, {'b1':250, 'e1':1500}, \
+                        {'b1':500, 'e1':1000}, {'b1':500, 'e1':1500}] } )
+
+        curricula = curricula_part0 # + curricula_part1 + curricula_part2
+
         #lrs = [ 4e-4 ]
         lrs = [ 3e-4 ]
-        epsilons = [ 5e-1 ] #, 7e-1, 4e-1, 'decay_99', 'decay_995' ]
+        epsilons = [ 1e-1 ] #, 7e-1, 4e-1, 'decay_99', 'decay_995' ]
         optimizers = [ ['adam',1e-6] ] 
         network_sizes = [\
-                ('fc',64),\
+#                ('fc',64),\
 #                ('fc',72),\
-#                ('fc','fc',64,32),\
+                ('fc','fc',128,128),\
                 ]
         data_modes = ['shuffled']
         smoothing = 25 # <- Adjust for plotting: higher=smoother
@@ -212,9 +232,9 @@ class experiment(object):
             print(("\t network shape: "+str(nsize)))
             if not gsz==None: print(("\t game input shape: "+str(gsz)))
             print(("\t loss: "+loss_fn))
-            if not curr==None: print(("\t curriculum: "+curr))
             print(("\t game version: "+str(gameversion)))
             print(("\t optimizer: "+str(opmzr)))
+            if not curr==None: print(("\t curriculum: "+curr.toString()))
             print("\t"+s)
             print("Running sample # "+str(ri+1)+'/'+str(nsamples)+': '+centric)
             results = r.run_session(params={ 'disp_avg_losses':20,\
@@ -263,8 +283,8 @@ class experiment(object):
                 '-net_'+'_'.join([str(i) for i in nsize]) + \
                 '-data_'+data_mode+'-frame_'+centric +\
                 '-loss_'+loss_fn +\
-                ('-curr_'+curr if not curr==None else '')+\
-                ('-seed_'+str(seed) if not seed==None else '')
+                ('-seed_'+str(seed) if not seed==None else '')+\
+                ('\ncurr_'+curr.toString() if not curr==None else '')
         return s
 
 

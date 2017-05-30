@@ -405,7 +405,7 @@ class environment_handler3(object):
     def getGridSize(self): return self.gridsz;
 
     '''  Debugging methods  '''
-    def displayGameState(self, State=None, exception=False):
+    def displayGameState(self, State=None, exception=True):
         ''' Print the state of the game in a visually appealing way. '''
         for y in range(self.gridsz[YDIM]):
             l = []
