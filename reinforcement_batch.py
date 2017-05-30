@@ -115,23 +115,27 @@ def CurriculumGenerator(inp, scheme):
 #        print([len(v) for v in inp.values() if type(v)==list])
 #        sys.exit()
         curr_specs = [{} for _ in range(np.prod([len(v) for v in inp.values() if type(v)==list]))]
+        curr_specs = [{} for _ in range(np.prod([len(v) for v in inp.values() if type(v)==list]))]
+        factor=1
+        n_curr = len(curr_specs)
         for spec, specvals in inp.items():
-            print(spec, specvals)
             orig_len = len(curr_specs)
             if type(specvals)==str:
                 specvals = [specvals]
             n_vals = len(specvals)
 
-            J = int(len(curr_specs) / n_vals)
-            print(len(curr_specs),J)
-            for i in range(len(curr_specs)):
-                print(' ',i,i//J, specvals[i//J])
-                if type(specvals[i//J])==dict:
+            J = int(n_curr / n_vals)
+            for i in range(n_curr):
+                ftr = i*factor
+                if type(specvals[ftr//J])==dict:
+                    curr_specs[ftr%n_curr + ftr//n_curr][spec] = specvals[i//J].copy()
                     curr_specs[i][spec] = specvals[i//J].copy()
                 else:
+                    curr_specs[ftr%n_curr + ftr//n_curr][spec] = specvals[i//J][:]
                     curr_specs[i][spec] = specvals[i//J][:]
-        for c in curr_specs:
-            print(c)
+                print(i, J, factor, (i*factor)%n_curr, (i*factor)//n_curr)
+            if n_vals>1: factor *= n_vals
+        for c in curr_specs: print(c)
         sys.exit()
         return [CurriculumSpecifier(specs) for specs in curr_specs]
     else: assert(False)
@@ -171,7 +175,8 @@ class CurriculumSpecifier(object):
         self.which_ids = which = inp['which ids']
         if which=='any': which='all'
         self.groups = {\
-            'all': { (1,): {'_u','_r','_d','_l'}, (2,): {'dl','dr','lu','ru'}}, \
+            'all': { (1,): {'_u','_r','_d','_l'}, (2,): {'dl','dr','lu','ru'}, \
+                    (3,): {'uu','dd','ll','rr'} }, \
             'any1step, u r diag': { (1,): {'_u','_r','_d','_l'}, (2,): {'ru'} }, \
             'r, u, ru-diag only': { (1,): {'_u','_r'}, (2,): {'ru'} }, \
             'r or u only': { (1,): {'_u','_r'}, (2,): {'ru'}, (3,): {'rr','uu'} }, \
@@ -207,7 +212,7 @@ class CurriculumSpecifier(object):
         begTime = {}; endTime = {} 
         schv = inp['schedule strengths']
         if type(schv)==str and schv=='egalitarian' and len(self.groups)==2:
-            begVal[(1,)] = 0.0; endVal[(1,)] = 1.0
+            begVal[(1,)] = 1.0; endVal[(1,)] = 1.0
             begVal[(2,)] = 0.0; endVal[(2,)] = 1.0
         elif sched_kind in ['linear anneal', 'no anneal']:
             if schv=='20-80 flat group 1':
@@ -218,7 +223,7 @@ class CurriculumSpecifier(object):
                 begVal[(2,)] = 0.0;    endVal[(2,)] = 70.0;
                 begVal[(3,)] = 0.0;    endVal[(3,)] = 10.0;
             else:
-                begVal[(1,)] = schv['b0'] if 'b0' in schv else 0.0
+                begVal[(1,)] = schv['b0'] if 'b0' in schv else 1.0
                 endVal[(1,)] = schv['e0'] if 'e0' in schv else 1.0
                 begVal[(2,)] = schv['b1'] if 'b1' in schv else 0.0
                 endVal[(2,)] = schv['e1'] if 'e1' in schv else 1.0
@@ -411,7 +416,7 @@ class Scheduler(object):
             my_group = self.statemap[i]['group']
             if len(my_group)==0:    continue
             sched_kind = curr.sched_kind
-            #print(my_group, self.init_states[i].name, sched_kind, curr.which_ids)
+#            print(i, my_group, self.init_states[i].name, sched_kind, curr.which_ids)
             if sched_kind == 'sigmoid': raise Exception("Dev: sigm not implemented")
             try:
                 begT = curr.begTime[my_group]
@@ -424,6 +429,7 @@ class Scheduler(object):
             except:
                 raise Exception("Group not logged in this curriculum object: "+\
                         str(my_group)+'  '+str(sched_kind))
+            #print(i, my_group, begT, endT, begS, endS)
             if endT<0: endT = self.training_epochs
             if sched_kind=='uniform':
                 assert(begS==endS)
