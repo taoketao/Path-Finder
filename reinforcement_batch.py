@@ -120,7 +120,7 @@ def CurriculumGenerator(inp, scheme=None):
 
     if scheme=='default':
         ''' Case: take the input <inp> as a literal dictionary. '''
-        return CurriculumSpecifier(inp)
+        return [CurriculumSpecifier(inp)]
     elif scheme == 'cross parameters':
         curr_specs = [{}]
         for spec, specvals in inp.items():
@@ -268,7 +268,9 @@ class CurriculumSpecifier(object):
         self.endTime = endTime
 
     def toString(self):
-        return '\n  '.join(['inp:'+str(self.inp), 'groups:'+str(self.groups), 'begTime:'+str(self.begTime), 'endTime:'+str(self.endTime), 'begVal:'+str(self.begVal), 'endVal:'+str(self.endVal)])
+        return '\n  '.join(['inp:'+str(self.inp), 'groups:'+str(self.groups), 'begTime:'+\
+                str(self.begTime), 'endTime:'+str(self.endTime), 'begVal:'+str(self.begVal), \
+                'endVal:'+str(self.endVal)])
         s=''
         s += 'Curriculum: [  schedule kind: '+ self.sched_kind + ',  '
         s += 'which states (' + self.inp['which ids'] + '): '
@@ -784,7 +786,7 @@ class reinforcement_b(object):
                             ']; corr?: '+str(int(Qvals[wq]['reward']))))
         t = time.time()-init_time
         print("Elapsed time in seconds: %i mins, %.3f seconds" % \
-                (t//60), (t % 60))
+                (t//60, t % 60))
         return episode_results
 
     def _do_batch(self, states, epoch, mode, buffer_me=False, printing=False):

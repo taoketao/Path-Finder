@@ -55,9 +55,9 @@ class experiment(object):
         if not Seed==None:
             self.seed = Seed
         else:
-            self.seed = 20
+            self.seed = 23
         if mode=='ego-allo-test':
-            self.dest = './storage/5-30/dev-fewertests4'
+            self.dest = './storage/5-31/dev1'
             if not os.path.exists(self.dest): os.makedirs(self.dest)
             self.nsamples = 1
             self.curseeds = list(range(self.seed,self.seed+self.nsamples))
@@ -83,11 +83,8 @@ class experiment(object):
         '''------------------'''
         ''' Options to edit: '''
         '''------------------'''
-        _training_epochs = [2500]
-        #mnas = [ '2_anneal_linear_e5000_b300', '2_anneal_linear_e1500_b300', \
-        #         '2_anneal_linear_e5000_b0', '2_anneal_linear_e1500_b0' , 2]
-        #mnas = ['2_anneal_linear_b500_e1000', '2_anneal_linear_b500_e501','2_anneal_linear_b1000_e1001' ]
-        mnas = [ 2] #, '2_anneal_linear_b250_e1700', '2_anneal_linear_b750_e1250' ]
+        _training_epochs = [2000]
+        mnas = [ 2 ] 
         gameversions = [ 'v2-a_fixedloc_leq' ]
         loss_fns = [ 'huber3e-5' ]
 
@@ -95,24 +92,30 @@ class experiment(object):
             <r, u, ru-diag only>, <uu ur>, <poles>, <all diag>, <1step>, <1step split> '''
         curricula = []
 #        for task_2groups in ['any1step, u r diag', 'r, u, ru-diag only', 'poles']:
-#            curricula += CurriculumGenerator( scheme='cross parameters', inp={\
-#                    'schedule kind': 'linear anneal', 'which ids':task_2groups, \
-#                    'schedule strengths': ['20-80 flat group 1', 'egalitarian'], \
+#        curricula += CurriculumGenerator( scheme='cross parameters', inp={\
+#                    'schedule kind': 'no anneal', 'which ids':'r, u, ru-diag only', \
+#                    'schedule strengths': ['20-80 flat group 1'], \
+#                    'schedule timings': [\
+#                        {'t1':800}\
+#                    ] } )#{'b1':0,'e1':5000},{'b1':1000, 'e1':5000},{'b1':4000, 'e1':8000},\
+#        curricula += CurriculumGenerator( scheme='cross parameters', inp={\
+#                    'schedule kind': 'no anneal', 'which ids':'r, u, ru-diag only', \
+#                    'schedule strengths': ['egalitarian', '20-80 flat group 1'], \
+#                    'schedule timings': [ {'t1':500},  {'t1':1000}, {'t1':1500}, \
+#                                          {'t1':2000}, {'t1':3000}  ] } )
+        curricula += CurriculumGenerator( inp={\
+                    'schedule kind': 'uniform', 'which ids':'r, u, ru-diag only'} )
+
+#        curricula += [ \
+#            CurriculumGenerator( { 'schedule kind':'uniform', 'which ids': '1step' } ),\
+#            CurriculumGenerator( { 'schedule kind':'uniform', 'which ids': '1step split' } )]
+#            CurriculumGenerator( { 'schedule kind':'uniform', 'which ids': \
+#                    'any1step, u r diag', 'schedule strengths':'egalitarian',
+#                    'schedule timings':{'b1':0, 'e1':800}} )]
 #                    'schedule timings': [{'b1':0, 'e1':250}, {'b1':0, 'e1':500},\
 #                        {'b1':0, 'e1':1000}, {'b1':250, 'e1':500}, \
 #                        {'b1':250, 'e1':1000}, {'b1':250, 'e1':1500}, \
 #                        {'b1':500, 'e1':1000}, {'b1':500, 'e1':1500}] } )
-#            curricula += CurriculumGenerator( scheme='cross parameters', inp={\
-#                    'schedule kind': 'no anneal', 'which ids':task_2groups, \
-#                    'schedule strengths': ['egalitarian', '20-80 flat group 1'], \
-#                    'schedule timings': [{'t1':100}, {'t1':300}, {'t1':500}, {'t1':1000}] } )
-#        curricula += [ \
-#            CurriculumGenerator( { 'schedule kind':'uniform', 'which ids': '1step' } ),\
-#            CurriculumGenerator( { 'schedule kind':'uniform', 'which ids': '1step split' } )]
-
-
-        curricula = [CurriculumGenerator( { 'schedule kind':'uniform', 'which ids': '1step' } )]
-
 #        'schedule timings': [{'b1':0, 'e1':250}, {'b1':0, 'e1':500},\
 #            {'b1':0, 'e1':1000}, {'b1':250, 'e1':500}, \
 #            {'b1':250, 'e1':1000}, {'b1':250, 'e1':1500}, \
@@ -128,7 +131,8 @@ class experiment(object):
 #                ('fc','fc',128,128),\
                 ]
         data_modes = ['shuffled']
-        smoothing = 25 # <- Adjust for plotting: higher=smoother
+        smoothing = 100 # <- Adjust for plotting: higher=smoother
+        self.test_frequency = 10
 
         '''--------------------------'''
         ''' end of recommended edits '''
@@ -197,29 +201,30 @@ class experiment(object):
                     self.nsamples, mna, lr, training_epochs, nsize, eps_expl, \
                     opmzr, gsz, data_mode, centric, gameversion, loss_fn, curr, s)
             save_as_successes(s+'-successes', tr_successes, te_successes, \
-                states, smooth_factor, centric, curr=curr, sm)
+                    states, smooth_factor, centric, curr=curr, statemap=sm, \
+                    tf=self.test_frequency)
             self.trial_counter+=1
             return;
 
         elif centric=='allo-ego':
-            tr_successes_e, te_successes_e, st_e, sm1 = self.run_single_train_sess(\
+            tr_successes_e, te_successes_e, st_e, sm = self.run_single_train_sess(\
                     self.nsamples, mna, lr, training_epochs, nsize, eps_expl, \
                     opmzr, gsz, data_mode, 'egocentric', gameversion, \
                     loss_fn, curr, s)
-            tr_successes_a, te_successes_a, st_a, sm2 = self.run_single_train_sess(\
+            tr_successes_a, te_successes_a, st_a, _ = self.run_single_train_sess(\
                     self.nsamples, mna, lr, training_epochs, nsize, eps_expl, \
                     opmzr, gsz, data_mode, 'allocentric',  gameversion, \
                     loss_fn, curr, s)
             self.trial_counter+=1
-            assert(st_e==st_a and sm1==sm2)
+            assert(st_e==st_a)
 
             tmp_states = [ (3,3,1,3), (3,3,2,2), (3,3,3,1), (3,3,4,2), (3,3,5,3),\
                        (3,3,4,4), (3,3,3,5), (3,3,2,4), (3,3,4,3), (3,3,2,3), 
                        (3,3,3,2), (3,3,3,4) ]
 
             save_as_successes(s+'-successes', tr_successes_e, te_successes_e, \
-                tmp_states, smooth_factor, ['ego','allo'],
-                tr_successes_a, te_successes_a, curr=curr, statemap=sm1)
+                tmp_states, smooth_factor, ['ego','allo'], tr_successes_a, \
+                te_successes_a, curr=curr, statemap=sm, tf=self.test_frequency)
             return
         
 
@@ -241,7 +246,7 @@ class experiment(object):
 
             print(("\n **********  NEW Network, trial number "+str(1+\
                 self.trial_counter)+'/'+str(self.tot_num_trials)))
-            print(("\t max number of actions: "+str(mna)))
+            if not curr==None: print(("\t max number of actions: "+str(mna)))
             print(("\t learning rate: "+str(lr)))
             print(("\t num training epochs: "+str(training_epochs)))
             print(("\t samples: "+str(self.nsamples)))
@@ -256,8 +261,9 @@ class experiment(object):
             if not curr==None: print(("\t curriculum: "+str(self.curr_map[curr])))
             print("\t"+s)
             print("Running sample # "+str(ri+1)+'/'+str(nsamples)+': '+centric)
-            results = r.run_session(params={ 'disp_avg_losses':10, 'test_frequency':50,\
-                'buffer_updates':False, 'rotational':False, 'printing':False}) 
+            results = r.run_session(params={ 'disp_avg_losses':10, \
+                    'test_frequency':self.test_frequency,\
+                    'buffer_updates':False, 'rotational':False, 'printing':False}) 
 #            with open('temp_results_keys.txt', 'w') as f:
 #                for k in sorted(results._data.keys()):
 #                    f.write(str(k)+'\n')
