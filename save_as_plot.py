@@ -257,6 +257,42 @@ def _make_str2(states, gridsz, trte, c1, c2):
         s += '\n'
     return s
 
+
+def _make_str3(make_states,gridsz, cnames):
+    s='\nStates:\n'
+    for which in range(int(ceil(len(make_states)/3.0))):
+        s += '\n'
+        s += '  '.join([cnames[s[0][0]-1] for s in \
+                make_states[which*3:(which+1)*3]])+'\n'
+        for i in range(gridsz[0]):
+            for j in range(gridsz[1]):
+                S = make_states[which*2][1]
+                if (i==S[1] and j==S[0]):   s += 'A'
+                elif (i==S[3] and j==S[2]): s += 'G'
+                else: s += '-'
+            s+='      '
+            if not which*3+1>=len(make_states):
+                for j in range(gridsz[1]):
+                    S = make_states[which*2+1][1]
+                    if (i==S[1] and j==S[0]):   s += 'A'
+                    elif (i==S[3] and j==S[2]): s += 'G'
+                    else: s += '-'
+                s+='      '
+                if not which*3+2>=len(make_states):
+                    for j in range(gridsz[1]):
+                        S = make_states[which*2+2][1]
+                        if (i==S[1] and j==S[0]):   s += 'A'
+                        elif (i==S[3] and j==S[2]): s += 'G'
+                        else: s += '-'
+                    if not i==gridsz[0]-1:
+                        s += '\n'
+                else: s += '\n' 
+            else: s += '\n' 
+        s += '\n'
+    return s
+
+
+
 def get_lex_id(state):
     ax,ay,gx,gy = state
     s=''.join( ['d' for _ in range(gy-ay)] + ['l' for _ in range(ax-gx)] \
@@ -290,11 +326,12 @@ def get_group(st, statemap, l):
     grp=None
     for j in range(l):
         if statemap[j]['lex_id']==lex:
-            grp = statemap[j]['group']
+            return statemap[j]['group']
+            
     return grp
 
 def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
-        tr2=None, te2=None, curr=None, statemap=None):
+        tr2=None, te2=None, curr=None, statemap=None, tf=None):
     if states==None:
         raise Exception()
     #f, ax = plt.subplots(lX*2, lY*2, sharex=True)
@@ -306,12 +343,12 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
         raise Exception("Please tell me if this is egocentric, allocentric, etc")
 
     Tr = smooth(tr, smoothing)
-    Te = te
-    #Te = smooth(te, smoothing)
+    if tf: Te = smooth(te, smoothing//(tf//2))
+    else:  Te = smooth(te, smoothing)
     if twoplots: 
         Tr2 = smooth(tr2, smoothing)
-        #Te2 = smooth(te2, smoothing)
-        Te2 = te2
+        if tf: Te2 = smooth(te, smoothing//(tf//2))
+        else:  Te2 = smooth(te, smoothing)
 
     #f,ax = plt.subplots(2,2, sharex=True, sharey=True)
     gs = gridspec.GridSpec(2, 3)
@@ -377,8 +414,12 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
                 ax[(0,1)].plot(Te2[:,i], c=darkcolors[i])
     ax[(1,0)].plot(np.mean(Tr, axis=1), c='orange')
     ax[(1,1)].plot(np.mean(Te, axis=1), c='orange')
-    ax[(1,0)].plot([3**-1]*Tr.shape[0], c='green')
-    ax[(1,1)].plot([3**-1]*Tr.shape[0], c='green')
+    if curr and curr.which_ids=='r, u, ru-diag only':
+        ax[(1,0)].plot([2*(3**-1)]*Tr.shape[0], c='green')
+        ax[(1,1)].plot([2*(3**-1)]*Tr.shape[0], c='green')
+    else:
+        ax[(1,0)].plot([3**-1]*Tr.shape[0], c='green')
+        ax[(1,1)].plot([3**-1]*Tr.shape[0], c='green')
     if twoplots:
         ax[(1,0)].plot(np.mean(Tr2, axis=1), c='black')
         ax[(1,1)].plot(np.mean(Te2, axis=1), c='black')
@@ -392,12 +433,15 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
         for sc in range(len(states)):
             s2 += '\n    '+colors[sc]+':\n'+ _make_str(states[sc],(5,5),-1)
     if not accessible_states=='all':
+        make_states = []
         for st in states:
             grp = get_group(st, statemap, Tr.shape[1])
             if len(grp)==0: # ie, no group
                 continue
             c = { 1: 'pinks/reds', 2: 'cyans/blues', 3: 'lightgreens/oranges' }[grp[0]]
-            s2 += '\n    '+c+':\n'+ _make_str(st,(7,7),-1)
+            make_states.append((grp,st))
+        cnames =['pink/red   ','cyan/blue  ','lightgreens/oranges'] 
+        s2 += '\n    '+c+':\n'+ _make_str3(make_states,(7,7),cnames)
     elif not states==None and Tr.shape[1]>4:
         s2 += _make_str2(states,(7,7), -1, colors, darkcolors)
 
