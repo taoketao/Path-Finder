@@ -784,7 +784,7 @@ class reinforcement_b(object):
                             ']; corr?: '+str(int(Qvals[wq]['reward']))))
         t = time.time()-init_time
         print("Elapsed time in seconds: %i mins, %.3f seconds" % \
-                (t//60), (t % 60)
+                (t//60, t % 60))
         return episode_results
 
     def _do_batch(self, states, epoch, mode, buffer_me=False, printing=False):

@@ -5,6 +5,7 @@ import matplotlib
 matplotlib.use('Agg')
 from matplotlib import gridspec, font_manager
 from math import ceil, floor
+from functools import reduce
 from reinforcement_batch import CurriculumSpecifier
 
 ACTION_NAMES = { 0:"U", 1:'R', 2:"D", 3:'L' } 
@@ -256,6 +257,13 @@ def _make_str2(states, gridsz, trte, c1, c2):
         s += '\n'
     return s
 
+def get_lex_id(state):
+    ax,ay,gx,gy = state
+    s=''.join( ['d' for _ in range(gy-ay)] + ['l' for _ in range(ax-gx)] \
+              +['r' for _ in range(gx-ax)] + ['u' for _ in range(ay-gy)])
+    while len(s)<2: s = '_'+s
+    return s
+
 def _make_str(s_id, gridsz, trte, debug=False):
     if trte==0: s ='train\n'
     if trte==1: s ='test \n'
@@ -277,6 +285,14 @@ def _make_str(s_id, gridsz, trte, debug=False):
         s += str(s_id)
     return s
 
+def get_group(st, statemap, l):
+    lex = get_lex_id(st)
+    grp=None
+    for j in range(l):
+        if statemap[j]['lex_id']==lex:
+            grp = statemap[j]['group']
+    return grp
+
 def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
         tr2=None, te2=None, curr=None, statemap=None):
     if states==None:
@@ -290,10 +306,12 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
         raise Exception("Please tell me if this is egocentric, allocentric, etc")
 
     Tr = smooth(tr, smoothing)
-    Te = smooth(te, smoothing)
+    Te = te
+    #Te = smooth(te, smoothing)
     if twoplots: 
         Tr2 = smooth(tr2, smoothing)
-        Te2 = smooth(te2, smoothing)
+        #Te2 = smooth(te2, smoothing)
+        Te2 = te2
 
     #f,ax = plt.subplots(2,2, sharex=True, sharey=True)
     gs = gridspec.GridSpec(2, 3)
@@ -319,23 +337,44 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
 
     if not curr==None: 
         accessible_states = reduce(set.union, [v for v in curr.groups.values()])
-        grp1_colors_tr = ['#ccccff','#9999ff','#6666ff','#3333ff','#0000cc','#000080'] # blues
-        grp2_colors_tr = ['#ccffff','#80ffff','#00ffff','#00cccc','#009999','#008080'] # cyans
-        grp3_colors_tr = ['#afffa9','#9ae095','#7fb77b','#5e895b','#496b47'] # lightgreens
-        grp1_colors_te = ['#ffcccc','#ff8080','#ff1a1a','#e60000','#cc0000','#990000'] # reds
-        grp2_colors_te = ['#ffe6f0','#ffcce0','#ff99c2','#ff66a3','#ff1a75','#e6005c'] # pinks
+        grp1_colors_tr = ['#ff99c2','#ffe6f0','#ff1a75','#ffcce0','#ff66a3','#e6005c'] # pinks
+        grp2_colors_tr = ['#00cccc','#008080','#ccffff','#00ffff','#009999','#80ffff'] # cyans
+        grp3_colors_tr = ['#cfffcc','#afffa9','#9ae095','#7fb77b','#5e895b','#496b47'] # lightgreens
+        grp1_colors_te = ['#ff1a1a','#ffcccc','#990000','#ff8080','#e60000','#cc0000'] # reds
+        grp2_colors_te = ['#000080','#6666ff','#9999ff','#3333ff','#ccccff','#0000cc'] # blues
         grp3_colors_te = ['#ffde7a','#ffd145','#ffc000','#dba602','#c19204','#987301'] # oranges
+        g1,g2,g3 = 0,0,0
     else: accessible_states='all'
 
     for i in range(Tr.shape[1]):
         if not accessible_states=='all':
-            if len(statemap[i]['group'])==0: # ie, no group
+            grp = get_group(states[i], statemap, Tr.shape[1])
+            if len(grp)==0: # ie, no group
                 continue
-        ax[(0,0)].plot(Tr[:,i], c=colors[i])
-        ax[(0,1)].plot(Te[:,i], c=colors[i])
-        if twoplots:
-            ax[(0,0)].plot(Tr2[:,i], c=darkcolors[i])
-            ax[(0,1)].plot(Te2[:,i], c=darkcolors[i])
+            if not grp: raise Exception(str(states[i]))
+            if grp[0]==1: 
+                lc = grp1_colors_tr[g1]
+                dc = grp1_colors_te[g1]
+                g1+=1
+            if grp[0]==2: 
+                lc = grp2_colors_tr[g2]
+                dc = grp2_colors_te[g2]
+                g2+=1
+            if grp[0]==3: 
+                lc = grp3_colors_tr[g3]
+                dc = grp3_colors_te[g3]
+                g3+=1
+            ax[(0,0)].plot(Tr[:,i], c=lc)
+            ax[(0,1)].plot(Te[:,i], c=lc)
+            if twoplots:
+                ax[(0,0)].plot(Tr2[:,i], c=dc)
+                ax[(0,1)].plot(Te2[:,i], c=dc)
+        else:
+            ax[(0,0)].plot(Tr[:,i], c=colors[i])
+            ax[(0,1)].plot(Te[:,i], c=colors[i])
+            if twoplots:
+                ax[(0,0)].plot(Tr2[:,i], c=darkcolors[i])
+                ax[(0,1)].plot(Te2[:,i], c=darkcolors[i])
     ax[(1,0)].plot(np.mean(Tr, axis=1), c='orange')
     ax[(1,1)].plot(np.mean(Te, axis=1), c='orange')
     ax[(1,0)].plot([3**-1]*Tr.shape[0], c='green')
@@ -349,10 +388,17 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
     ax[(1,1)].set_xlabel("Testing")
     plt.gcf().set_size_inches(16,10)
     s2 = "Successes taken per state, per epoch."
-    if not states==None and Tr.shape[1]==4:
+    if not states==None and Tr.shape[1]==4 and acccessible_states=='all':
         for sc in range(len(states)):
             s2 += '\n    '+colors[sc]+':\n'+ _make_str(states[sc],(5,5),-1)
-    if not states==None and Tr.shape[1]>4:
+    if not accessible_states=='all':
+        for st in states:
+            grp = get_group(st, statemap, Tr.shape[1])
+            if len(grp)==0: # ie, no group
+                continue
+            c = { 1: 'pinks/reds', 2: 'cyans/blues', 3: 'lightgreens/oranges' }[grp[0]]
+            s2 += '\n    '+c+':\n'+ _make_str(st,(7,7),-1)
+    elif not states==None and Tr.shape[1]>4:
         s2 += _make_str2(states,(7,7), -1, colors, darkcolors)
 
 
@@ -361,6 +407,10 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
             s2 += '\nLight / orange: '+centric[0]
             s2 += '\nDark / black: '+centric[1]
             fs = 14
+        elif not accessible_states=='all':
+            s2 += '\nfoo: '+centric[0]
+            s2 += '\nbar: '+centric[1]
+            fs = 10
         elif Tr.shape[1]>4:
             s2 += '\nblues: '+centric[0]
             s2 += '\nreds: '+centric[1]

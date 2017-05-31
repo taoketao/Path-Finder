@@ -55,9 +55,9 @@ class experiment(object):
         if not Seed==None:
             self.seed = Seed
         else:
-            self.seed = 20
+            self.seed = 23
         if mode=='ego-allo-test':
-            self.dest = './storage/5-30/dev-fewertests4'
+            self.dest = './storage/5-30/curr-4'
             if not os.path.exists(self.dest): os.makedirs(self.dest)
             self.nsamples = 1
             self.curseeds = list(range(self.seed,self.seed+self.nsamples))
@@ -83,35 +83,38 @@ class experiment(object):
         '''------------------'''
         ''' Options to edit: '''
         '''------------------'''
-        _training_epochs = [2500]
+        _training_epochs = [4000]
         #mnas = [ '2_anneal_linear_e5000_b300', '2_anneal_linear_e1500_b300', \
         #         '2_anneal_linear_e5000_b0', '2_anneal_linear_e1500_b0' , 2]
         #mnas = ['2_anneal_linear_b500_e1000', '2_anneal_linear_b500_e501','2_anneal_linear_b1000_e1001' ]
-        mnas = [ 2] #, '2_anneal_linear_b250_e1700', '2_anneal_linear_b750_e1250' ]
+        mnas = [ '2_anneal_linear_b250_e1700' '2_anneal_linear_b750_e1250' ]
+        #mnas = [ '2_anneal_linear_b250_e400' ] #'2_anneal_linear_b750_e1250' ]
         gameversions = [ 'v2-a_fixedloc_leq' ]
         loss_fns = [ 'huber3e-5' ]
 
         ''' Curriculum options: <all>, <any1step, u r diag>, <r or u only>, 
             <r, u, ru-diag only>, <uu ur>, <poles>, <all diag>, <1step>, <1step split> '''
         curricula = []
-#        for task_2groups in ['any1step, u r diag', 'r, u, ru-diag only', 'poles']:
-#            curricula += CurriculumGenerator( scheme='cross parameters', inp={\
-#                    'schedule kind': 'linear anneal', 'which ids':task_2groups, \
-#                    'schedule strengths': ['20-80 flat group 1', 'egalitarian'], \
+        for task_2groups in ['any1step, u r diag', 'r, u, ru-diag only', 'poles']:
+            curricula += CurriculumGenerator( scheme='cross parameters', inp={\
+                    'schedule kind': 'linear anneal', 'which ids':task_2groups, \
+                    'schedule strengths': ['20-80 flat group 1', 'egalitarian'], \
+                    'schedule timings': [{'b1':0, 'e1':500},\
+                        {'b1':250, 'e1':1000}, {'b1':250, 'e1':1500}, \
+                        {'b1':500, 'e1':1500}] } )
 #                    'schedule timings': [{'b1':0, 'e1':250}, {'b1':0, 'e1':500},\
 #                        {'b1':0, 'e1':1000}, {'b1':250, 'e1':500}, \
 #                        {'b1':250, 'e1':1000}, {'b1':250, 'e1':1500}, \
 #                        {'b1':500, 'e1':1000}, {'b1':500, 'e1':1500}] } )
-#            curricula += CurriculumGenerator( scheme='cross parameters', inp={\
-#                    'schedule kind': 'no anneal', 'which ids':task_2groups, \
-#                    'schedule strengths': ['egalitarian', '20-80 flat group 1'], \
-#                    'schedule timings': [{'t1':100}, {'t1':300}, {'t1':500}, {'t1':1000}] } )
-#        curricula += [ \
-#            CurriculumGenerator( { 'schedule kind':'uniform', 'which ids': '1step' } ),\
-#            CurriculumGenerator( { 'schedule kind':'uniform', 'which ids': '1step split' } )]
+            curricula += CurriculumGenerator( scheme='cross parameters', inp={\
+                    'schedule kind': 'no anneal', 'which ids':task_2groups, \
+                    'schedule strengths': ['egalitarian', '20-80 flat group 1'], \
+                    'schedule timings': [{'t1':100}, {'t1':300}, {'t1':500}, {'t1':1000}] } )
+        curricula += [ \
+            CurriculumGenerator( { 'schedule kind':'uniform', 'which ids': '1step' } ),\
+            CurriculumGenerator( { 'schedule kind':'uniform', 'which ids': '1step split' } )]
 
 
-        curricula = [CurriculumGenerator( { 'schedule kind':'uniform', 'which ids': '1step' } )]
 
 #        'schedule timings': [{'b1':0, 'e1':250}, {'b1':0, 'e1':500},\
 #            {'b1':0, 'e1':1000}, {'b1':250, 'e1':500}, \
@@ -128,7 +131,7 @@ class experiment(object):
 #                ('fc','fc',128,128),\
                 ]
         data_modes = ['shuffled']
-        smoothing = 25 # <- Adjust for plotting: higher=smoother
+        smoothing = 10 # <- Adjust for plotting: higher=smoother
 
         '''--------------------------'''
         ''' end of recommended edits '''
@@ -197,21 +200,21 @@ class experiment(object):
                     self.nsamples, mna, lr, training_epochs, nsize, eps_expl, \
                     opmzr, gsz, data_mode, centric, gameversion, loss_fn, curr, s)
             save_as_successes(s+'-successes', tr_successes, te_successes, \
-                states, smooth_factor, centric, curr=curr, sm)
+                states, smooth_factor, centric, curr=curr, statemap=sm)
             self.trial_counter+=1
             return;
 
         elif centric=='allo-ego':
-            tr_successes_e, te_successes_e, st_e, sm1 = self.run_single_train_sess(\
+            tr_successes_e, te_successes_e, st_e, sm = self.run_single_train_sess(\
                     self.nsamples, mna, lr, training_epochs, nsize, eps_expl, \
                     opmzr, gsz, data_mode, 'egocentric', gameversion, \
                     loss_fn, curr, s)
-            tr_successes_a, te_successes_a, st_a, sm2 = self.run_single_train_sess(\
+            tr_successes_a, te_successes_a, st_a, _ = self.run_single_train_sess(\
                     self.nsamples, mna, lr, training_epochs, nsize, eps_expl, \
                     opmzr, gsz, data_mode, 'allocentric',  gameversion, \
                     loss_fn, curr, s)
             self.trial_counter+=1
-            assert(st_e==st_a and sm1==sm2)
+            assert(st_e==st_a)
 
             tmp_states = [ (3,3,1,3), (3,3,2,2), (3,3,3,1), (3,3,4,2), (3,3,5,3),\
                        (3,3,4,4), (3,3,3,5), (3,3,2,4), (3,3,4,3), (3,3,2,3), 
@@ -219,7 +222,7 @@ class experiment(object):
 
             save_as_successes(s+'-successes', tr_successes_e, te_successes_e, \
                 tmp_states, smooth_factor, ['ego','allo'],
-                tr_successes_a, te_successes_a, curr=curr, statemap=sm1)
+                tr_successes_a, te_successes_a, curr=curr, statemap=sm)
             return
         
 
