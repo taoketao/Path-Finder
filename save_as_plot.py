@@ -737,7 +737,14 @@ def save_final_losses_process(dest):
         print('') 
 
 if __name__=='__main__':
-    if 'logfile'==sys.argv[1]:
+    print(len(sys.argv), sys.argv)
+    if len(sys.argv)==1:
+        print("save_as_plot information: use first argument <logfile> and log"+\
+            " file(s) to generate an analysis of final values of an experiment."+\
+            " Use first argument <state_actions> to generate a Successes plot"+\
+            " of testing and training success rates per state.  Give just files "+\
+            " of .npy format to develop loss plots for each." )
+    elif 'logfile'==sys.argv[1]:
 #        if len(sys.argv)>3:
 #            Z = np.load(sys.argv[2])
 #            Y = np.load(sys.argv[3])
