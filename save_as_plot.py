@@ -6,7 +6,7 @@ matplotlib.use('Agg')
 from matplotlib import gridspec, font_manager
 from math import ceil, floor
 from functools import reduce
-from reinforcement_batch import CurriculumSpecifier
+from reinforcement_batch import *
 
 ACTION_NAMES = { 0:"U", 1:'R', 2:"D", 3:'L' } 
 UDIR = 0; RDIR = 1; DDIR = 2; LDIR = 3
@@ -572,10 +572,14 @@ def save_as_plot(fns, lr, mna, nsamples=None):
     print("Success: last file stored at", fn[:-4])
 
 
+def freeze_dict(d):
+    if type(d)==set: return '<'+str(', '.join([str(di) for di in sorted(d)]))+'>'
+    if type(d)==tuple and len(d)==1: return 'g'+str(d[0])
+    if not type(d)==dict: return str(d)
+    return '{'+', '.join([freeze_dict(k)+':'+freeze_dict(v) for k,v in sorted(d.items())])+'}'
 
 
-
-def get_attributes(s_,i):
+def get_attributes(s_,i, curr):
     s=s_.strip()
     s=s[s.rfind('/')+1:]
     sl = s.split('-')
@@ -631,20 +635,65 @@ def get_attributes(s_,i):
         if 'loss' == sl[itr][:4]:
             pass#if 'huber' in sl['TODO']: pass
         if 'curr' == sl[itr][:4]:
-            attrs['curr'] = sl[itr]
-            while len(attrs['curr'])<30: attrs['curr'] += ' '
-            itr += 1; continue    
+            if curr==None:
+                attrs['curr'] = sl[itr]
+                while len(attrs['curr'])<30: attrs['curr'] += ' '
+                itr += 1; continue    
+            else:
+                currid = int(sl[itr][5:sl[itr].find('sample')-1])
         itr+=1
+    if not curr==None:
+        for k,v in curr[currid].items():
+            if k=='currID': continue
+            if k=='inp':
+                for inpk, inpv in v.items():
+                    attrs['curr--'+inpk] = inpv if type(inpv)==int else freeze_dict(inpv)
+            else:
+                attrs['curr--'+k] = v if type(v)==int else freeze_dict(v)
+    if not 'curr--schedule timings' in attrs.keys():
+        attrs['curr--schedule timings'] = -1
+    if not 'curr--schedule strengths' in attrs.keys():
+        attrs['curr--schedule strengths'] = -1
+    for k,v in attrs.items():
+        K = str(k)
+        while len(K)<20: K = K+' '
+        print('\t'+K+'\t'+str(v))
+    print('\n\n')
 
     return attrs
 
+def ingest_curr_file(fn):
+    cs = []
+    with open(fn, 'r') as f:
+      while True:
+        line = f.readline()
+        if not line: break
+        c_obj = {'currID':int(line[:line.find(':')-1])}
+        c_obj['inp'] = eval(line[line.find('inp:')+4:])
+        for key in ['groups', 'begTime', 'endTime', 'begVal', 'endVal']:
+            line = f.readline()
+            c_obj[key] = eval(line[line.find(':')+1:])
+        cs.append(c_obj)
+    return cs
+
+def samp_tup(ndim, pct):
+    t = []
+    for i in range(ndim):
+        if random.random()<pct: t.append(i)
+    return tuple(t)
+
 def save_final_losses_process(dest): 
     #for now, only supports one file processing.
+    curr=None
     datas = []
     tmp_data = []
     trials = []
     if type(dest)==list:
-        dests = dest
+        if len(dest)>1 and 'logfile' in dest[0] and 'curriculum' in dest[1]:
+            dests = [dest[0]]
+            curr = ingest_curr_file(dest[1])
+        else:
+            dests = dest
     else:
         dests = [dest]
     for d in dests:
@@ -678,7 +727,7 @@ def save_final_losses_process(dest):
                         tmp_data[i] /= counter
                     counter = 0.0
                     data.append(tmp_data)
-        DF.close(); #sys.exit()
+        DF.close(); 
         datas.append(data)
     if not len(trials)==len(datas):
         datas = datas[0]
@@ -688,7 +737,7 @@ def save_final_losses_process(dest):
     n_entities = len(datas)
     attributes = []
     for i in range(n_entities):
-        attributes.append( get_attributes(trials[i], i) )
+        attributes.append( get_attributes(trials[i], i, curr) )
     nsamps = attributes[-1]['nsamples']
     # insider knowledge....sloppy.....:
     if attributes[-1]['frame']=='allo-ego':
@@ -754,7 +803,9 @@ def save_final_losses_process(dest):
         if h in WhichVary:
             for X in sorted(list(nversions[hp_map[h]])):
                 #print('\t'+'{0[0]:<15}{0[1]:<15}'.format((h+':'+str(X))))
-                print('\t'+h+':\t'+str(X))
+                hstr = h+':'
+                while len(hstr)<30: hstr = hstr+' '
+                print('\t'+hstr+'  '+str(X))
     print("CONSTANTS: these hyperparameters were held constant:")
     for h in hyperparams:
         if h not in WhichVary:
@@ -779,6 +830,12 @@ def save_final_losses_process(dest):
     elif ndim==3: Margs = [ (0,), (1,), (2,), (0,2), (1,2), (0,1), tuple([]) ]
     elif ndim==4: Margs = [ (0,), (1,), (2,), (3,), (0,1), (0,2), (1,2),\
          (0,3), (1,3), (2,3), (0,1,2), (0,1,3), (0,2,3), (1,2,3), tuple([])] # ALL
+    else: Margs = [tuple([])]+[ tuple([i for i in range(ndim) if not i==j]) for \
+            j in range(ndim)] + [ samp_tup(ndim, 0.3) for _ in range(20)]
+        
+        
+#        [ (0,), (1,), (2,), (3,), (0,1), (0,2), (1,2),\
+#         (0,3), (1,3), (2,3), (0,1,2), (0,1,3), (0,2,3), (1,2,3), tuple([])] # ALL
 #    if ndim==4: Margs = [ (0,), (1,), (2,), (3,), (0,1), (0,2), (1,2),\
 #         (0,3), (1,3), (2,3), (0,1,2), (0,1,3), (0,2,3), (1,2,3), tuple([])] # ALL
 #    if ndim==4: Margs = [ (1,), (2,), (3,), (1,2), (1,3), (2,3), (1,2,3), \
@@ -786,7 +843,7 @@ def save_final_losses_process(dest):
 #    if ndim==4: Margs = [ (0,1,2), (0,1,3), (0,2,3), (1,2,3), tuple([])] # ALL
 #    elif ndim==4: Margs = [ (2,), (3,), (2,3), tuple([])] # don't marg over
         # erroneous LR
-    else: raise Exception(ndim)
+#    else: raise Exception(ndim)
 
     for margs in Margs:
         s = []
@@ -802,7 +859,9 @@ def save_final_losses_process(dest):
         MAXS = np.max(MaxAccsIsolated, axis=margs)
         if len(s)==1:
             for i in range(arr_shape[s[0]]):
-                print(WhichVaryVals[s[0]][i]+\
+                wv = str(WhichVaryVals[s[0]][i])
+                while len(wv)<30: wv += ' '
+                print(wv+\
                         '\tavg  '+'{:1.3f}'.format(MEAN[i])+\
                         '\tmin  '+'{:1.3f}'.format(MINS[i])+\
                         '\tmax  '+'{:1.3f}'.format(MAXS[i]))
@@ -822,8 +881,8 @@ def save_final_losses_process(dest):
           for i in range(arr_shape[s[0]]):
            for j in range(arr_shape[s[1]]):
             for k in range(arr_shape[s[2]]):
-                print(WhichVaryVals[s[0]][i]+'  '+WhichVaryVals[s[1]][j]+'  '+\
-                        WhichVaryVals[s[2]][k]+\
+                print(str(WhichVaryVals[s[0]][i])+'  '+str(WhichVaryVals[s[1]][j])+'  '+\
+                        str(WhichVaryVals[s[2]][k])+\
                         '\tavg '+ '{:1.3f}'.format(MEAN[i,j,k])+\
                         '\tmin '+ '{:1.3f}'.format(MINS[i,j,k])+\
                         '\tmax '+ '{:1.3f}'.format(MAXS[i,j,k]))
@@ -833,11 +892,11 @@ def save_final_losses_process(dest):
 if __name__=='__main__':
     print(len(sys.argv), sys.argv)
     if len(sys.argv)==1:
-        print("save_as_plot information: use first argument <logfile> and log"+\
-            " file(s) to generate an analysis of final values of an experiment."+\
-            " Use first argument <state_actions> to generate a Successes plot"+\
-            " of testing and training success rates per state.  Give just files "+\
-            " of .npy format to develop loss plots for each." )
+        print("\nsave_as_plot information: use first argument <logfile> and log"+\
+            "\n\tfile(s) to generate an analysis of final values of an experiment."+\
+            "\n\tUse first argument <state_actions> to generate a Successes plot"+\
+            "\n\tof testing and training success rates per state.  Give just files "+\
+            "\n\tof .npy format to develop loss plots for each." )
     elif 'logfile'==sys.argv[1]:
 #        if len(sys.argv)>3:
 #            Z = np.load(sys.argv[2])

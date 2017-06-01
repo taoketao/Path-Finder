@@ -57,7 +57,7 @@ class experiment(object):
         else:
             self.seed = 23
         if mode=='ego-allo-test':
-            self.dest = './storage/5-31/dev1'
+            self.dest = './storage/5-31/curr-0'
             if not os.path.exists(self.dest): os.makedirs(self.dest)
             self.nsamples = 1
             self.curseeds = list(range(self.seed,self.seed+self.nsamples))
@@ -83,7 +83,7 @@ class experiment(object):
         '''------------------'''
         ''' Options to edit: '''
         '''------------------'''
-        _training_epochs = [2000]
+        _training_epochs = [4000]
         mnas = [ 2 ] 
         gameversions = [ 'v2-a_fixedloc_leq' ]
         loss_fns = [ 'huber3e-5' ]
@@ -92,20 +92,24 @@ class experiment(object):
             <r, u, ru-diag only>, <uu ur>, <poles>, <all diag>, <1step>, <1step split> '''
         curricula = []
 #        for task_2groups in ['any1step, u r diag', 'r, u, ru-diag only', 'poles']:
-#        curricula += CurriculumGenerator( scheme='cross parameters', inp={\
-#                    'schedule kind': 'no anneal', 'which ids':'r, u, ru-diag only', \
-#                    'schedule strengths': ['20-80 flat group 1'], \
-#                    'schedule timings': [\
-#                        {'t1':800}\
-#                    ] } )#{'b1':0,'e1':5000},{'b1':1000, 'e1':5000},{'b1':4000, 'e1':8000},\
+        if len(_training_epochs)>1: raise Exception()
+        timings = []
+        for i in range(_training_epochs[0]//1000):
+            for j in range(i,_training_epochs[0]//1000):
+                timings.append({'b1':i, 'e1':j})
+        curricula += CurriculumGenerator( scheme='cross parameters', inp={\
+                    'schedule kind': 'linear anneal', 'which ids':'r, u, ru-diag only', \
+                    'schedule strengths': ['20-80 flat group 1', 'egalitarian'], \
+                    'schedule timings': timings })
+                    #] } )#{'b1':0,'e1':5000},{'b1':1000, 'e1':5000},{'b1':4000, 'e1':8000},\
 #        curricula += CurriculumGenerator( scheme='cross parameters', inp={\
 #                    'schedule kind': 'no anneal', 'which ids':'r, u, ru-diag only', \
 #                    'schedule strengths': ['egalitarian', '20-80 flat group 1'], \
 #                    'schedule timings': [ {'t1':500},  {'t1':1000}, {'t1':1500}, \
 #                                          {'t1':2000}, {'t1':3000}  ] } )
-        curricula += CurriculumGenerator( inp={\
-                    'schedule kind': 'uniform', 'which ids':'r, u, ru-diag only'} )
-
+#        curricula += CurriculumGenerator( inp={\
+#                    'schedule kind': 'uniform', 'which ids':'r, u, ru-diag only'} )
+#
 #        curricula += [ \
 #            CurriculumGenerator( { 'schedule kind':'uniform', 'which ids': '1step' } ),\
 #            CurriculumGenerator( { 'schedule kind':'uniform', 'which ids': '1step split' } )]
@@ -131,8 +135,10 @@ class experiment(object):
 #                ('fc','fc',128,128),\
                 ]
         data_modes = ['shuffled']
-        smoothing = 100 # <- Adjust for plotting: higher=smoother
-        self.test_frequency = 10
+#        smoothing = 100 # <- Adjust for plotting: higher=smoother
+#        self.test_frequency = 10
+        smoothing = 25 # <- Adjust for plotting: higher=smoother
+        self.test_frequency = 5
 
         '''--------------------------'''
         ''' end of recommended edits '''
@@ -146,7 +152,8 @@ class experiment(object):
             for ci, cr in enumerate(curricula): 
                 s = str(ci)+'\t:\t'+cr.toString().replace('\n',\
                         '\n\t\t') + '\n'
-                curr_out.write(s)
+                try:        curr_out.write(s)
+                except:     curr_out.write(unicode(s))
                 self.curr_map[cr] = ci
 
 

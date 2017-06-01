@@ -317,10 +317,7 @@ class Scheduler(object):
 
         ''' >>>>    Curriculum schedule setup. '''
         self.curriculum = override['curriculum'] 
-        if not which_game=='v2-a_fixedloc_leq':
-            self.batchsize = max(len(init_states), 4)
-        else: 
-            self.batchsize = DEFAULT_BATCH_SIZE
+        self.batchsize = len(init_states)
         if type(self.curriculum)==str and self.curriculum=='uniform':
             pass # for now...
         elif type(self.curriculum)==str and ('linear_anneal' in self.curriculum\
@@ -455,7 +452,7 @@ class Scheduler(object):
             if sched_kind=='no anneal':
                 raise Exception("dev err: epoch should have been caught already.")
             if sched_kind=='linear anneal':
-                pct = float(epoch-begT) / (endT-begT)
+                pct = 1- float(epoch-begT) / (endT-begT)
                 ps[i] = pct*begS + (1-pct)*endS
 
         #print(['%1.3f' % p for p in ps])
@@ -727,16 +724,18 @@ class reinforcement_b(object):
 
             ep_losses = None
             for __mode in ['train', 'test']:
+                states = next_states if __mode=='train' else \
+                        [(i,s) for i,s in enumerate(self.init_states)]
                 if __mode=='test' and epoch>0 and \
                             not epoch % params['test_frequency']==0:
                     # Use previously stored test values
-                    for si in range(len(next_states)):
+                    for si in range(len(states)):
                         #episode_results.put(epoch, si, episode_results._get(epoch-1,si,'test'))
                         episode_results.put(epoch, si, last_test_eps[si])
                 else:
                     num_as, goals, actns, ep_losses = \
-                            self._do_batch(next_states, epoch, __mode)
-                    for si, (_,s0) in enumerate(next_states):
+                            self._do_batch(states, epoch, __mode)
+                    for si, (_,s0) in enumerate(states):
                         result_info = { 's0': s0, \
                                         'num_a': num_as[si], \
                                         'success': goals[si], \
