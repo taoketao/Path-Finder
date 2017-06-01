@@ -55,9 +55,9 @@ class experiment(object):
         if not Seed==None:
             self.seed = Seed
         else:
-            self.seed = 23
+            self.seed = 0
         if mode=='ego-allo-test':
-            self.dest = './storage/5-31/curr-0'
+            self.dest = './storage/5-31/curr-2-1samp'
             if not os.path.exists(self.dest): os.makedirs(self.dest)
             self.nsamples = 1
             self.curseeds = list(range(self.seed,self.seed+self.nsamples))
@@ -83,7 +83,7 @@ class experiment(object):
         '''------------------'''
         ''' Options to edit: '''
         '''------------------'''
-        _training_epochs = [4000]
+        _training_epochs = [5000]
         mnas = [ 2 ] 
         gameversions = [ 'v2-a_fixedloc_leq' ]
         loss_fns = [ 'huber3e-5' ]
@@ -94,9 +94,9 @@ class experiment(object):
 #        for task_2groups in ['any1step, u r diag', 'r, u, ru-diag only', 'poles']:
         if len(_training_epochs)>1: raise Exception()
         timings = []
-        for i in range(_training_epochs[0]//1000):
-            for j in range(i,_training_epochs[0]//1000):
-                timings.append({'b1':i, 'e1':j})
+        for i in range(_training_epochs[0]//1000-1):
+            for j in range(i+1,_training_epochs[0]//1000):
+                timings.append({'b1':i*1000, 'e1':j*1000})
         curricula += CurriculumGenerator( scheme='cross parameters', inp={\
                     'schedule kind': 'linear anneal', 'which ids':'r, u, ru-diag only', \
                     'schedule strengths': ['20-80 flat group 1', 'egalitarian'], \
@@ -137,7 +137,7 @@ class experiment(object):
         data_modes = ['shuffled']
 #        smoothing = 100 # <- Adjust for plotting: higher=smoother
 #        self.test_frequency = 10
-        smoothing = 25 # <- Adjust for plotting: higher=smoother
+        smoothing = 20 # <- Adjust for plotting: higher=smoother
         self.test_frequency = 5
 
         '''--------------------------'''
@@ -155,7 +155,6 @@ class experiment(object):
                 try:        curr_out.write(s)
                 except:     curr_out.write(unicode(s))
                 self.curr_map[cr] = ci
-
 
         self.tot_num_trials = len(_training_epochs)*len(mnas)*len(lrs)*\
               len(epsilons)*len(optimizers)*len(network_sizes)*len(data_modes)*\

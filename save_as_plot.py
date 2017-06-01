@@ -258,10 +258,11 @@ def _make_str2(states, gridsz, trte, c1, c2):
     return s
 
 
-def _make_str3(make_states,gridsz, cnames):
+def _make_str3(make_states,gridsz, grp_colors):
     s='\nStates:\n'
     for which in range(int(ceil(len(make_states)/3.0))):
         s += '\n'
+        print(make_states, grp_colors); sys.exit()
         s += '  '.join([cnames[s[0][0]-1] for s in \
                 make_states[which*3:(which+1)*3]])+'\n'
         for i in range(gridsz[0]):
@@ -374,12 +375,18 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
 
     if not curr==None: 
         accessible_states = reduce(set.union, [v for v in curr.groups.values()])
-        grp1_colors_tr = ['#ff99c2','#ffe6f0','#ff1a75','#ffcce0','#ff66a3','#e6005c'] # pinks
-        grp2_colors_tr = ['#00cccc','#008080','#ccffff','#00ffff','#009999','#80ffff'] # cyans
-        grp3_colors_tr = ['#cfffcc','#afffa9','#9ae095','#7fb77b','#5e895b','#496b47'] # lightgreens
-        grp1_colors_te = ['#ff1a1a','#ffcccc','#990000','#ff8080','#e60000','#cc0000'] # reds
-        grp2_colors_te = ['#000080','#6666ff','#9999ff','#3333ff','#ccccff','#0000cc'] # blues
-        grp3_colors_te = ['#ffde7a','#ffd145','#ffc000','#dba602','#c19204','#987301'] # oranges
+#        grp1_colors_tr = ['#ff99c2','#ffe6f0','#ff1a75','#ffcce0','#ff66a3','#e6005c'] # pinks
+#        grp2_colors_tr = ['#00cccc','#008080','#ccffff','#00ffff','#009999','#80ffff'] # cyans
+#        grp3_colors_tr = ['#cfffcc','#afffa9','#9ae095','#7fb77b','#5e895b','#496b47'] # lightgreens
+#        grp1_colors_te = ['#ff1a1a','#ffcccc','#990000','#ff8080','#e60000','#cc0000'] # reds
+#        grp2_colors_te = ['#000080','#6666ff','#9999ff','#3333ff','#ccccff','#0000cc'] # blues
+#        grp3_colors_te = ['#ffde7a','#ffd145','#ffc000','#dba602','#c19204','#987301'] # oranges
+        grp_colors = [['#3333ff','#ccccff','#0000cc','#9999ff','#000080','#6666ff'], # blues
+                      ['#00cccc','#ccffff','#009999','#80ffff','#008080','#00ffff'], # cyans
+                      ['#7fb77b','#cfffcc','#5e895b','#afffa9','#496b47','#9ae095'], # lightgreens
+                      ['#e60000','#ffcccc','#cc0000','#ff8080','#990000','#ff1a1a'], # reds
+                      ['#ff66a3','#ffe6f0','#ff1a75','#ffcce0','#e6005c','#ff99c2'], # pinks
+                      ['#dba602','#ffde7a','#c19204','#ffd145','#987301','#ffc000']] # oranges
         g1,g2,g3 = 0,0,0
     else: accessible_states='all'
 
@@ -390,16 +397,16 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
                 continue
             if not grp: raise Exception(str(states[i]))
             if grp[0]==1: 
-                lc = grp1_colors_tr[g1]
-                dc = grp1_colors_te[g1]
+                lc = grp_colors[0][g1]
+                dc = grp_colors[1][g1]
                 g1+=1
             if grp[0]==2: 
-                lc = grp2_colors_tr[g2]
-                dc = grp2_colors_te[g2]
+                lc = grp_colors[2][g2]
+                dc = grp_colors[3][g2]
                 g2+=1
             if grp[0]==3: 
-                lc = grp3_colors_tr[g3]
-                dc = grp3_colors_te[g3]
+                lc = grp_colors[4][g3]
+                dc = grp_colors[5][g3]
                 g3+=1
             ax[(0,0)].plot(Tr[:,i], c=lc)
             ax[(0,1)].plot(Te[:,i], c=lc)
@@ -440,8 +447,8 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
                 continue
             c = { 1: 'pinks/reds', 2: 'cyans/blues', 3: 'lightgreens/oranges' }[grp[0]]
             make_states.append((grp,st))
-        cnames =['pink/red   ','cyan/blue  ','lightgreens/oranges'] 
-        s2 += '\n    '+c+':\n'+ _make_str3(make_states,(7,7),cnames)
+        #cnames =['pink/red   ','cyan/blue  ','lightgreens/oranges'] 
+        s2 += '\n    '+c+':\n'+ _make_str3(make_states,(7,7),grp_colors)
     elif not states==None and Tr.shape[1]>4:
         s2 += _make_str2(states,(7,7), -1, colors, darkcolors)
 

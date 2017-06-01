@@ -24,7 +24,7 @@ ACTIONS = [UDIR, RDIR, DDIR, LDIR]
 ACTION_NAMES = { UDIR:"UDIR", DDIR:"DDIR", RDIR:"RDIR", LDIR:"LDIR" }
 P_ACTION_NAMES = { UDIR:"^U^", DDIR:"vDv", RDIR:"R>>", LDIR:"<<L" }
 DEFAULT_EPSILON = 0.9
-DEFAULT_BATCH_SIZE = 12
+DEFAULT_BATCH_SIZE = 16
 ALL=-1
 A_LAYER=0
 G_LAYER=1
@@ -317,7 +317,7 @@ class Scheduler(object):
 
         ''' >>>>    Curriculum schedule setup. '''
         self.curriculum = override['curriculum'] 
-        self.batchsize = len(init_states)
+        self.batchsize = max(DEFAULT_BATCH_SIZE, len(init_states))
         if type(self.curriculum)==str and self.curriculum=='uniform':
             pass # for now...
         elif type(self.curriculum)==str and ('linear_anneal' in self.curriculum\
@@ -762,8 +762,8 @@ class reinforcement_b(object):
 #            if gethostname()=='PDP' and epoch==1000: 
 #                call(['nvidia-smi'])
 
-            if (epoch%1000==0 and epoch>0) or \
-                    (epoch<=params['disp_avg_losses'] and epoch%5==0): 
+            if (epoch%1000==0 and epoch>0) or (epoch==self.training_epochs-1)\
+                    or (epoch<=params['disp_avg_losses'] and epoch%5==0): 
                 s = "Epoch #"+str(epoch)+"/"+str(self.training_epochs)
                 s += '\tlast '+str(params['disp_avg_losses'])+' losses'+\
                         ' averaged over all states:'
