@@ -57,7 +57,7 @@ class experiment(object):
         else:
             self.seed = 0
         if mode=='ego-allo-test':
-            self.dest = './storage/5-31/curr-2-1samp'
+            self.dest = './storage/5-31/dev5'
             if not os.path.exists(self.dest): os.makedirs(self.dest)
             self.nsamples = 1
             self.curseeds = list(range(self.seed,self.seed+self.nsamples))
@@ -83,7 +83,7 @@ class experiment(object):
         '''------------------'''
         ''' Options to edit: '''
         '''------------------'''
-        _training_epochs = [5000]
+        _training_epochs = [500]
         mnas = [ 2 ] 
         gameversions = [ 'v2-a_fixedloc_leq' ]
         loss_fns = [ 'huber3e-5' ]
@@ -92,15 +92,17 @@ class experiment(object):
             <r, u, ru-diag only>, <uu ur>, <poles>, <all diag>, <1step>, <1step split> '''
         curricula = []
 #        for task_2groups in ['any1step, u r diag', 'r, u, ru-diag only', 'poles']:
-        if len(_training_epochs)>1: raise Exception()
-        timings = []
-        for i in range(_training_epochs[0]//1000-1):
-            for j in range(i+1,_training_epochs[0]//1000):
-                timings.append({'b1':i*1000, 'e1':j*1000})
-        curricula += CurriculumGenerator( scheme='cross parameters', inp={\
+#        if len(_training_epochs)>1: raise Exception()
+#        timings = []
+#        for i in range(_training_epochs[0]//1000-1):
+#            for j in range(i+1,_training_epochs[0]//1000):
+#                timings.append({'b1':i*1000, 'e1':j*1000})
+
+        curricula += CurriculumGenerator( scheme='default', inp={\
                     'schedule kind': 'linear anneal', 'which ids':'r, u, ru-diag only', \
-                    'schedule strengths': ['20-80 flat group 1', 'egalitarian'], \
-                    'schedule timings': timings })
+                    'schedule strengths': ['20-80 flat group 1'], \
+                    'schedule timings': {'b1':100, 'e1':300}})
+                    #'schedule timings': timings })
                     #] } )#{'b1':0,'e1':5000},{'b1':1000, 'e1':5000},{'b1':4000, 'e1':8000},\
 #        curricula += CurriculumGenerator( scheme='cross parameters', inp={\
 #                    'schedule kind': 'no anneal', 'which ids':'r, u, ru-diag only', \

@@ -258,7 +258,7 @@ def _make_str2(states, gridsz, trte, c1, c2):
     return s
 
 
-def _make_str3(make_states,gridsz, grp_colors):
+def _make_str3(make_states,gridsz, grp_colors, used_clrs):
     s='\nStates:\n'
     for which in range(int(ceil(len(make_states)/3.0))):
         s += '\n'
@@ -328,7 +328,6 @@ def get_group(st, statemap, l):
     for j in range(l):
         if statemap[j]['lex_id']==lex:
             return statemap[j]['group']
-            
     return grp
 
 def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
@@ -390,23 +389,31 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
         g1,g2,g3 = 0,0,0
     else: accessible_states='all'
 
-    for i in range(Tr.shape[1]):
+    print(len(states), Tr.shape[1])
+#    print(len(states))
+#    for i in range(len(accessible_states) if not accessible_states=='all' else Tr.shape[1]):
+    Used_CLRS = []
+    for i in range(len(states)):
         if not accessible_states=='all':
             grp = get_group(states[i], statemap, Tr.shape[1])
+            print(grp)
             if len(grp)==0: # ie, no group
                 continue
             if not grp: raise Exception(str(states[i]))
             if grp[0]==1: 
                 lc = grp_colors[0][g1]
                 dc = grp_colors[1][g1]
+                Used_CLRS.append( (1, g1) )
                 g1+=1
             if grp[0]==2: 
                 lc = grp_colors[2][g2]
                 dc = grp_colors[3][g2]
+                Used_CLRS.append( (2, g1) )
                 g2+=1
             if grp[0]==3: 
                 lc = grp_colors[4][g3]
                 dc = grp_colors[5][g3]
+                Used_CLRS.append( (3, g1) )
                 g3+=1
             ax[(0,0)].plot(Tr[:,i], c=lc)
             ax[(0,1)].plot(Te[:,i], c=lc)
@@ -448,7 +455,7 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
             c = { 1: 'pinks/reds', 2: 'cyans/blues', 3: 'lightgreens/oranges' }[grp[0]]
             make_states.append((grp,st))
         #cnames =['pink/red   ','cyan/blue  ','lightgreens/oranges'] 
-        s2 += '\n    '+c+':\n'+ _make_str3(make_states,(7,7),grp_colors)
+        s2 += '\n    '+c+':\n'+ _make_str3(make_states,(7,7),grp_colors,Used_CLRS)
     elif not states==None and Tr.shape[1]>4:
         s2 += _make_str2(states,(7,7), -1, colors, darkcolors)
 
@@ -696,6 +703,8 @@ def save_final_losses_process(dest):
     tmp_data = []
     trials = []
     if type(dest)==list:
+        if len(dest)==1 and 'curriculum' in str(os.listdir(dest[0])):
+            dest.append( dest[0][:dest[0].rfind('/')] )
         if len(dest)>1 and 'logfile' in dest[0] and 'curriculum' in dest[1]:
             dests = [dest[0]]
             curr = ingest_curr_file(dest[1])
