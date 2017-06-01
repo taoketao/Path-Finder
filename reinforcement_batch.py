@@ -724,8 +724,13 @@ class reinforcement_b(object):
 
             ep_losses = None
             for __mode in ['train', 'test']:
-                states = next_states if __mode=='train' else \
-                        [(i,s) for i,s in enumerate(self.init_states)]
+                if __mode=='train': 
+                    states = next_states
+                else:
+                    n_inits = len(self.init_states)
+                    samp = np.append(np.arange(n_inits), np.random.choice(\
+                            range(n_inits), self.scheduler.batchsize-n_inits)) 
+                    states = [(i,self.init_states[i]) for i in samp]
                 if __mode=='test' and epoch>0 and \
                             not epoch % params['test_frequency']==0:
                     # Use previously stored test values
