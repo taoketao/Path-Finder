@@ -57,7 +57,7 @@ class experiment(object):
         else:
             self.seed = 0
         if mode=='ego-allo-test':
-            self.dest = './storage/5-31/dev6'
+            self.dest = './storage/5-31/dev7'
             if not os.path.exists(self.dest): os.makedirs(self.dest)
             self.nsamples = 1
             self.curseeds = list(range(self.seed,self.seed+self.nsamples))
@@ -67,7 +67,7 @@ class experiment(object):
             self.run_exp('allo-ego')
 
         self.fin_logfile.close()
-        if not gethostname()=='PDP':
+        if not 'pdp' in gethostname().lower():
             call(["open", self.dest])
     def getseed(self): 
         self.seed += 1
@@ -100,20 +100,8 @@ class experiment(object):
         curricula += CurriculumGenerator( scheme='default', inp={\
                     'schedule kind': 'linear anneal', 'which ids':'r, u, ru-diag only', \
                     'schedule strengths': '20-80 flat group 1', \
-                    'schedule timings': {'b1':30, 'e1':60 }})
-=======
-#        if len(_training_epochs)>1: raise Exception()
-#        timings = []
-#        for i in range(_training_epochs[0]//1000-1):
-#            for j in range(i+1,_training_epochs[0]//1000):
-#                timings.append({'b1':i*1000, 'e1':j*1000})
-
-        curricula += CurriculumGenerator( scheme='default', inp={\
-                    'schedule kind': 'linear anneal', 'which ids':'r, u, ru-diag only', \
-                    'schedule strengths': ['20-80 flat group 1'], \
-                    'schedule timings': {'b1':100, 'e1':300}})
-                    #'schedule timings': timings })
-                    ] } )#{'b1':0,'e1':5000},{'b1':1000, 'e1':5000},{'b1':4000, 'e1':8000},\
+                    'schedule timings': {'b1':10, 'e1':30 }})
+                    #] } )#{'b1':0,'e1':5000},{'b1':1000, 'e1':5000},{'b1':4000, 'e1':8000},\
 #        curricula += CurriculumGenerator( scheme='cross parameters', inp={\
 #                    'schedule kind': 'no anneal', 'which ids':'r, u, ru-diag only', \
 #                    'schedule strengths': ['egalitarian', '20-80 flat group 1'], \
