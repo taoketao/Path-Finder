@@ -267,7 +267,6 @@ def _make_str3(gs, make_states,gridsz, grp_colors, used_clrs):
         ax_tmp = plt.subplot(gs[2*(i//ndivs), 8+i%ndivs])
         ax_tmp.get_xaxis().set_visible(False)
         ax_tmp.get_yaxis().set_visible(False)
-        #state_legend.append(ax_tmp)
         s_ = ''
         grp, S = make_states[i]
         for y in range(gridsz[0]):
@@ -287,6 +286,10 @@ def _make_str3(gs, make_states,gridsz, grp_colors, used_clrs):
                 color=grp_colors[grp[0]-1][grp_ittrs[grp[0]]]))
 
         grp_ittrs[grp[0]] += 1
+    ax_tmp = plt.subplot(gs[2*(len(make_states)//ndivs), 8+len(make_states)%ndivs])
+    ax_tmp.set_axis_off()
+#    ax_tmp.get_xaxis().set_visible(False)
+#    ax_tmp.get_yaxis().set_visible(False)
     return ''
 
 

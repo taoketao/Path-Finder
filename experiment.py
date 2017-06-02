@@ -57,7 +57,7 @@ class experiment(object):
         else:
             self.seed = 0
         if mode=='ego-allo-test':
-            self.dest = './storage/6-01/dev-4/'
+            self.dest = './storage/6-01/dev-5/'
             if not os.path.exists(self.dest): os.makedirs(self.dest)
             self.nsamples = 1
             self.curseeds = list(range(self.seed,self.seed+self.nsamples))
@@ -83,7 +83,7 @@ class experiment(object):
         '''------------------'''
         ''' Options to edit: '''
         '''------------------'''
-        _training_epochs = [600]
+        _training_epochs = [100]
 #        mnas = [ 2, '2_anneal_linear_b300_e800', '2_anneal_linear_b100_e1000' ] 
         #mnas = [ '2_anneal_linear_b0_e750', '2_anneal_linear_b1000_e1050' ] 
         mnas = [ '2_anneal_linear_b1000_e2000', '2_anneal_linear_b500_e1000' ] 
@@ -215,34 +215,33 @@ class experiment(object):
         s=self.get_filesave_str(mna, lr, gsz, eps_expl, opmzr, training_epochs,\
                 nsize, data_mode, centric, gameversion, loss_fn, curr, self.seed)
 
+        states = [ (3,3,1,3), (3,3,2,2), (3,3,3,1), (3,3,4,2), (3,3,5,3),\
+                       (3,3,4,4), (3,3,3,5), (3,3,2,4), (3,3,4,3), (3,3,2,3), 
+                       (3,3,3,2), (3,3,3,4) ]
+
         if centric in ['allocentric', 'egocentric']:
-            tr_successes, te_successes, states, sm = self.run_single_train_sess(\
+            tr_successes, te_successes, sm = self.run_single_train_sess(\
                     self.nsamples, mna, lr, training_epochs, nsize, eps_expl, \
                     opmzr, gsz, data_mode, centric, gameversion, loss_fn, curr, s)
             save_as_successes(s+'-successes', tr_successes, te_successes, \
-                    states, smooth_factor, centric, curr=curr, statemap=sm, \
+                    smooth_factor, centric, curr=curr, statemap=sm, \
                     tf=self.test_frequency)
             self.trial_counter+=1
             return;
 
         elif centric=='allo-ego':
-            tr_successes_e, te_successes_e, st_e, sm = self.run_single_train_sess(\
+            tr_successes_e, te_successes_e, sm = self.run_single_train_sess(\
                     self.nsamples, mna, lr, training_epochs, nsize, eps_expl, \
                     opmzr, gsz, data_mode, 'egocentric', gameversion, \
                     loss_fn, curr, s)
-            tr_successes_a, te_successes_a, st_a, _ = self.run_single_train_sess(\
+            tr_successes_a, te_successes_a, _ = self.run_single_train_sess(\
                     self.nsamples, mna, lr, training_epochs, nsize, eps_expl, \
                     opmzr, gsz, data_mode, 'allocentric',  gameversion, \
                     loss_fn, curr, s)
             self.trial_counter+=1
-            assert(st_e==st_a)
-
-            tmp_states = [ (3,3,1,3), (3,3,2,2), (3,3,3,1), (3,3,4,2), (3,3,5,3),\
-                       (3,3,4,4), (3,3,3,5), (3,3,2,4), (3,3,4,3), (3,3,2,3), 
-                       (3,3,3,2), (3,3,3,4) ]
 
             save_as_successes(s+'-successes', tr_successes_e, te_successes_e, \
-                tmp_states, smooth_factor, ['ego','allo'], tr_successes_a, \
+                states, smooth_factor, ['ego','allo'], tr_successes_a, \
                 te_successes_a, curr=curr, statemap=sm, tf=self.test_frequency)
             return
         
@@ -252,7 +251,6 @@ class experiment(object):
             loss_fn, curr, s=''):
         Tr_Successes = [];      Tr_losses = []; 
         Te_Successes = [];      Te_losses = [];  
-        states = None
         statemap = None
         for ri in range(nsamples):
             ovr = {'max_num_actions': mna, 'learning_rate':lr, \
@@ -303,15 +301,13 @@ class experiment(object):
                         str(test_results)+'\n'
 #                try:    self.tot_logfile.write(unicode(s_))
 #                except: self.tot_logfile.write(s_)
-            if states==None: 
-                states = results.get('states')
             if statemap==None: 
                 statemap = r.scheduler.statemap.copy()
         
         np.save(s+'-loss-graph.npy', np.array([Tr_losses, Te_losses]))
 
         return  np.mean(np.array(Tr_Successes), axis=0), \
-                np.mean(np.array(Te_Successes), axis=0), states, statemap
+                np.mean(np.array(Te_Successes), axis=0), statemap
 
 
 

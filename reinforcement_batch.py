@@ -24,7 +24,7 @@ ACTIONS = [UDIR, RDIR, DDIR, LDIR]
 ACTION_NAMES = { UDIR:"UDIR", DDIR:"DDIR", RDIR:"RDIR", LDIR:"LDIR" }
 P_ACTION_NAMES = { UDIR:"^U^", DDIR:"vDv", RDIR:"R>>", LDIR:"<<L" }
 DEFAULT_EPSILON = 0.9
-DEFAULT_BATCH_SIZE = 48
+DEFAULT_TRAINING_BATCH_SIZE = 32
 ALL=-1
 A_LAYER=0
 G_LAYER=1
@@ -42,69 +42,31 @@ class session_results(object):
             actions_attempted: fixed size, Action ids with -1 for untaken actions,
             success: bool of whether the goal was reached,
             mode: "train" or "test"         '''
-    def __init__(self, n_training_epochs, n_episodes, batch):
-        self._data = {} # should be nepochs x nepisodes
-        self.nepochs = n_training_epochs
-        self.nepisodes = n_episodes
-        self.batch=batch
+    def __init__(self, nepochs, batchsize, n_init_states):
+        self.test_loss  = np.zeros( (nepochs, n_init_states) )
+        self.test_sccs  = np.zeros( (nepochs, n_init_states) )
+        self.train_loss = np.zeros( (nepochs, n_init_states, batchsize) )
+        self.train_sccs = np.zeros( (nepochs, n_init_states, batchsize) )
 
-    def put(self, epoch, episode, data): 
-        if not 'mode' in list(data.keys()): 
-            raise Exception("Provide mode: train or test.")
-        if data['mode']=='train': mode = 0 
-        if data['mode']=='test' : mode = 1 
-        D = data.copy()
-        for d in D:
-            if d=='s0':
-                D[d] = data[d].copy()
-                D[d].grid = [coo_matrix(D[d].grid[:,:,i]) for i in range(N_LAYERS)]
-                D[d].sparse=True
-        if episode=='all':
-            self._data[(epoch, mode)] = D
-        else:
-            self._data[(epoch, episode, mode)] = D
-
-    def get(self, p1, p2=None, p3=None, batch=True): 
-        if p1 in ['train','test'] and p2==None and p3==None:
-            return self._get(ALL,ALL,p1)
-        if p1 in ['train','test'] and p2 in ['successes'] and p3==None:
-            x__ = []
-            for X in self._get(ALL,ALL,p1):
-                x__.append(np.array([ 1.0 if x['success'] else 0.0 for x in X]))
-            return np.array( x__ )
-        if p1 in ['train','test'] and p2 in ['nsteps'] and p3==None:
-            return np.array( [[ x['num_a'] for x in X]\
-                        for X in self._get(ALL,ALL,p1)])
-        if p1 in ['train','test'] and p2 in ['losses'] and p3==None:
-            x__ = []
-            for X in self._get(ALL,ALL,p1):
-                x__.append(np.array([ x['loss'] for x in X]))
-            return np.array( x__ )
-
-            return np.array( [[ x['loss'] for x in X]\
-                        for X in self._get(ALL,ALL,p1)])
-
-        if p1=='states' and p2==None and p3==None: # return state tups:
-            uniq_st = set()
-            for i in range(self.nepochs):
-                for j in range(self.nepisodes):
-                    st = self._data[(i,j,0)]['s0']
-                    st.sparsify()
-                    uniq_st.add(( st.grid[A_LAYER].row[0],\
-                                  st.grid[A_LAYER].col[0],\
-                                  st.grid[G_LAYER].row[0],\
-                                  st.grid[G_LAYER].col[0] ))
-            return sorted(list(uniq_st))
-        return self._get(p1,p2,p3)
-
-    def _get(self, epoch, episode, mode):
-        if mode=='train': mode = 0 
-        if mode=='test' : mode = 1 
-        if epoch == ALL: 
-            return [self._get(ep, episode, mode) for ep in range(self.nepochs)]
-        if episode == ALL: 
-            return [self._get(epoch, ep, mode) for ep in range(self.nepisodes)]
-        return self._data[(epoch, episode, mode)].copy()
+    def put(self, epoch, state_id, batch_index, results_info):
+        if type(results_info)==str and results_info=='last test episode':
+            self.test_sccs[epoch, state_id] = self.test_sccs[epoch-1, state_id]
+            self.test_loss[epoch, state_id] = self.test_loss[epoch-1, state_id]
+        elif results_info['mode']=='train':
+            self.train_sccs[epoch, state_id, batch_index] = results_info['success']
+            self.train_loss[epoch, state_id, batch_index] = results_info['loss']
+        elif results_info['mode']=='test':
+            self.test_sccs[epoch, state_id] = results_info['success']
+            self.test_loss[epoch, state_id] = results_info['loss']
+    def get(self, tr_or_te, what):
+        if tr_or_te=='train':
+            if what=='losses':      return np.mean(self.train_loss, axis=2)
+            if what=='successes':   return np.mean(self.train_sccs, axis=2)
+            raise Exception()
+        if tr_or_te=='test':
+            if what=='losses':      return self.test_loss
+            if what=='successes':   return self.test_sccs
+        raise Exception()
 
 def CurriculumGenerator(inp, scheme=None):
     ''' Generates numerous curricula according to a scheme. '''
@@ -318,8 +280,8 @@ class Scheduler(object):
 
         ''' >>>>    Curriculum schedule setup. '''
         self.curriculum = override['curriculum'] 
-        self.batchsize = max(DEFAULT_BATCH_SIZE, len(init_states))
-#        self.batchsize = len(init_states)
+#        self.batchsize = max(DEFAULT_BATCH_SIZE, len(init_states))
+        self.batchsize = DEFAULT_TRAINING_BATCH_SIZE
         if type(self.curriculum)==str and self.curriculum=='uniform':
             pass # for now...
         elif type(self.curriculum)==str and ('linear_anneal' in self.curriculum\
@@ -686,7 +648,7 @@ class reinforcement_b(object):
         sess.run(init)
         
         episode_results = session_results(self.training_epochs, \
-                self.minibatchsize, batch=True)
+                self.minibatchsize, len(self.init_states))
 
         Buff=[]
         last_n_test_losses = []
@@ -696,7 +658,6 @@ class reinforcement_b(object):
 
         self.Net.adjust_lr(self.scheduler.get_init_lr())
         init_time = time.time()
-        last_test_eps = None 
 
         for epoch in range(self.training_epochs):
             # Save weights
@@ -722,38 +683,35 @@ class reinforcement_b(object):
                     next_states = [(i,self.init_states[i]) for i in order]
                 else: raise Exception("Provided or default data mode not "+\
                             "implemented or not provided..")
-            if not last_test_eps: last_test_eps=[0]*len(next_states)
 
-            ep_losses = None
-            for __mode in ['train', 'test']:
-                if __mode=='train': 
-                    states = next_states
-                else:
-#                    n_inits = len(self.init_states)
-#                    samp = np.append(np.arange(n_inits), np.random.choice(\
-#                            range(n_inits), self.scheduler.batchsize-n_inits)) 
-#                    states = [(i,self.init_states[i]) for i in samp]
-                    states = [tup for tup in enumerate(self.init_states)]
-                if __mode=='test' and epoch>0 and \
-                            not epoch % params['test_frequency']==0:
-                    # Use previously stored test values
-                    print(last_test_eps, samp)
-                    for si in range(len(states)):
-                        #episode_results.put(epoch, si, episode_results._get(epoch-1,si,'test'))
-                        episode_results.put(epoch, si, last_test_eps[si])
-                else:
-                    num_as, goals, actns, ep_losses = \
-                            self._do_batch(states, epoch, __mode)
-                    for si, (_,s0) in enumerate(states):
-                        result_info = { 's0': s0, \
-                                        'num_a': num_as[si], \
-                                        'success': goals[si], \
-                                        'attempted_actions': actns[:,si], \
-                                        'loss': ep_losses[-1], \
-                                        'mode': __mode }
-                        if __mode=='test':
-                            last_test_eps[si] = result_info
-                        episode_results.put(epoch, si, result_info)
+            ''' ------------ Run train ------------ '''
+            num_as, goals, actns, ep_losses = \
+                    self._do_batch( next_states, epoch, 'train')
+            for batch_index, (which_state,s0) in enumerate(next_states):
+                result_info = { 's0': s0, \
+                                'num_a': num_as[batch_index], \
+                                'success': goals[batch_index], \
+                                'attempted_actions': actns[:,batch_index], \
+                                'loss': ep_losses[-1], \
+                                'mode': 'train' }
+                episode_results.put(epoch, which_state, batch_index, result_info)
+
+            ''' ------------ Run test ------------ '''
+            if epoch>0 and not epoch % params['test_frequency']==0:
+                for i in range(len(self.init_states)):
+                    episode_results.put(epoch, i, None, 'last test episode')
+            else:
+                iter_states = [(i,s) for i,s in enumerate(self.init_states)]
+                num_as, goals, actns, ep_losses = \
+                                self._do_batch(iter_states, epoch, 'test')
+                for i, s0 in enumerate(self.init_states):
+                    result_info = { 's0': s0, \
+                                    'num_a': num_as[i], \
+                                    'success': goals[i], \
+                                    'attempted_actions': actns[:,i], \
+                                    'loss': ep_losses[-1], \
+                                    'mode': 'test' }
+                    episode_results.put(epoch, i, None, result_info)
 
             ret_te = ep_losses
             ret_sc = goals
