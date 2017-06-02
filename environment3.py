@@ -49,6 +49,7 @@ class state(object):
         self.gridsz = gridsize
         if name==None: self.name=None
         else: self.name=name[name.rfind('/')+1:]
+        self.lexid = None
         self.sparse = False # coo_matrix format?
         self.grid = np.zeros((self.gridsz[XDIM], self.gridsz[YDIM], \
                 NUM_LAYERS), dtype='float32')

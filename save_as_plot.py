@@ -396,13 +396,15 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
     used_clrs = []
 #    incl = np.zeros(Tr.shape, dtype=bool)
     incl = []
-    for i in range(len(states)):
-        if not accessible_states=='all':
-            grp = get_group(states[i], statemap, Tr.shape[1])
+    for ind, S in statemap.items():
+        if len(S['group'])>0:
+            print(ind, S['group'], S['lex_id'])
+            incl.append((ind, S))
+    if not accessible_states=='all':
+        for i,S in incl:
+            grp = S['group']
             if len(grp)==0: # ie, no group
                 continue
-#            incl[i,:] = True
-            incl.append(i)
             if not grp: raise Exception(str(states[i]))
             if grp[0]==1: 
                 clr = grp_colors[0][g1]
@@ -421,19 +423,25 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
             if twoplots:
                 ax[(0,0)].plot(Tr2[:,i]+i*5e-4*(-1)**i, c=clr)
                 ax[(0,1)].plot(Te2[:,i]+i*5e-4*(-1)**i, c=clr)
-        else:
+    else:
+        for i in range(len(states)):
             ax[(0,0)].plot(Tr[:,i], c=colors[i])
             ax[(0,1)].plot(Te[:,i], c=colors[i])
             if twoplots:
                 ax[(0,0)].plot(Tr2[:,i], c=darkcolors[i])
                 ax[(0,1)].plot(Te2[:,i], c=darkcolors[i])
-
+#    print(incl,states, [states[i[0]] for i in incl]) 
+    inds = [i[0] for i in incl]
     if not accessible_states=='all':
-        ax[(1,0)].plot(np.mean(Tr[:,incl], axis=1), c='orange')
-        ax[(1,1)].plot(np.mean(Te[:,incl], axis=1), c='orange')
+        ax[(1,0)].plot(np.mean(Tr[:,inds], axis=1)+np.random.random(\
+                (Tr.shape[0],))*0.03, c='orange')
+        ax[(1,1)].plot(np.mean(Te[:,inds], axis=1)+np.random.random(\
+                (Te.shape[0],))*0.03, c='orange')
         if twoplots:
-            ax[(1,0)].plot(np.mean(Tr2[:,incl], axis=1), c='black')
-            ax[(1,1)].plot(np.mean(Te2[:,incl], axis=1), c='black')
+            ax[(1,0)].plot(np.mean(Tr2[:,inds], axis=1)+np.random.random(\
+                    (Tr2.shape[0],))*0.03, c='black')
+            ax[(1,1)].plot(np.mean(Te2[:,inds], axis=1)+np.random.random(\
+                    (Te2.shape[0],))*0.03, c='black')
     else:
         ax[(1,0)].plot(np.mean(Tr, axis=1), c='orange')
         ax[(1,1)].plot(np.mean(Te, axis=1), c='orange')
