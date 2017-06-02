@@ -1,9 +1,9 @@
 import sys, os, time 
 import numpy as np
-import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')
-from matplotlib import gridspec, font_manager
+import matplotlib.pyplot as plt
+from matplotlib import gridspec, font_manager, patches
 from math import ceil, floor
 from functools import reduce
 from reinforcement_batch import *
@@ -259,29 +259,29 @@ def _make_str2(states, gridsz, trte, c1, c2):
 
 
 def _make_str3(gs, make_states,gridsz, grp_colors, used_clrs):
+    ndivs = 4
     state_legend = []
-    ittr=0; gsg = gs.get_geometry()
-    for _ in range(len(make_states)):
-        ax_tmp = plt.subplot(gs[ittr//gsg[0], 8+ittr%gsg[0]])
+    gsg = gs.get_geometry()
+    for ittr in range(len(make_states)):
+        ax_tmp = plt.subplot(gs[2*(ittr//ndivs), 8+ittr%ndivs])
         ax_tmp.get_xaxis().set_visible(False)
         ax_tmp.get_yaxis().set_visible(False)
         state_legend.append(ax_tmp)
-        ittr += 1
     ittr=0
-    X, Y = plt.gcf().get_dpi() * plt.gcf().get_size_inches()
-    h = int(Y / gsg[0])
-    w = int(X / gsg[1])
-    print(X,Y,h,w)
-    h = int(gsg[0])
-    w = int(gsg[1])
-    print(X,Y,h,w)
+#    X, Y = plt.gcf().get_dpi() * plt.gcf().get_size_inches()
+#    h = int(Y / gsg[0])
+#    w = int(X / gsg[1])
+##    print(X,Y,h,w)
+#    h = int(gsg[0])
+#    w = int(gsg[1])
+#    print(X,Y,h,w)
     s='\nStates:\n'
-    for which in range(int(ceil(len(make_states)/3.0))):
+    for which in range(int(ceil(len(make_states)/4.0))):
         s += '\n'
         #print(make_states, grp_colors); sys.exit()
 #        s += '  '.join([cnames[s[0][0]-1] for s in \
 #                make_states[which*3:(which+1)*3]])+'\n'
-        print(h*(ittr//gsg[0]), w*(ittr%gsg[1]), 0.1, 0.1, used_clrs[ittr], grp_colors[used_clrs[ittr][0]][used_clrs[ittr][1]])
+#        print(h*(ittr//gsg[0]), w*(ittr%gsg[1]), 0.1, 0.1, used_clrs[ittr], grp_colors[used_clrs[ittr][0]][used_clrs[ittr][1]])
 
         s1=s2=s3=''
         for i in range(gridsz[0]):
@@ -310,22 +310,40 @@ def _make_str3(gs, make_states,gridsz, grp_colors, used_clrs):
             else: s += '\n' 
             s1 += '\n'; s2 += '\n'; s3 += '\n'
 
-        for i,s_ in enumerate([s1,s2,s3]):
-            xi_line = w*(ittr%gsg[1])
-            xf_line = w*(0.7+ittr%gsg[1])
-            #xi_text = w*(i+0.8+ittr%gsg[1])
-            xi_text = w*gsg[1]
+        grp_ittrs = [0]*40
+        for i in range(len(make_states)):
+            s_ = ''
+            grp, S = make_states[i]
+            print(S)
+            for y in range(gridsz[0]):
+                for x in range(gridsz[1]):
+                    if (x==S[0] and y==S[1]):   s_ += 'A'
+                    elif (x==S[2] and y==S[3]): s_ += 'G'
+                    else: s_ += '-'
+                s_ += '\n'
 
-            state_legend[ittr].text(xi_text, -1.0, s_, \
+#            xi_text = w*gsg[1]
+
+            state_legend[i].text(0, -1.0, s_, \
                     horizontalalignment='left',\
-                    verticalalignment='center')
-            print('->>', h*(6*ittr//gsg[0]), xi_line, xf_line)
-            state_legend[ittr].hlines(h*(10*ittr//gsg[0]),\
-                    xi_line, xf_line, \
-                    color=grp_colors[used_clrs[i//(1+ittr)+i][0]]\
-                                    [used_clrs[i//(1+ittr)+i][1]],\
-                    linewidth = 0.5)
+                    verticalalignment='center', family='monospace')
+#            state_legend[i].text(1, -1.0, s_, \
+#                    horizontalalignment='left',\
+#                    verticalalignment='center', family='monospace')
+#            print('->>', h*(6*ittr//gsg[0]), xi_line, xf_line)
+            print(grp[0], grp_ittrs[grp[0]])
+            state_legend[i].add_patch( patches.Rectangle\
+                    ( (0,0), 1, 1, \
+                    #color=grp_colors[grp_ittrs[grp[0]]][grp[0]]))
+                    color=grp_colors[grp[0]][grp_ittrs[grp[0]]]))
+#                                    [grp][1]))
+#                    color=grp_colors[used_clrs[grp][0]]\
+#                                    [used_clrs[grp][1]]))
+#            state_legend[ittr].hlines(h*(10*ittr//gsg[0]),\
+#                    xi_line, xf_line, \
+#                    linewidth = 0.5)
             ittr += 1
+            grp_ittrs[grp[0]] += 1
 
         s += '\n'
     return s
