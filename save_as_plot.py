@@ -261,17 +261,15 @@ def _make_str2(states, gridsz, trte, c1, c2):
 def _make_str3(gs, make_states,gridsz, grp_colors, used_clrs):
     ndivs = 4
     state_legend = []
+    grp_ittrs = [0]*40
     gsg = gs.get_geometry()
-    for ittr in range(len(make_states)):
-        ax_tmp = plt.subplot(gs[2*(ittr//ndivs), 8+ittr%ndivs])
+    for i in range(len(make_states)):
+        ax_tmp = plt.subplot(gs[2*(i//ndivs), 8+i%ndivs])
         ax_tmp.get_xaxis().set_visible(False)
         ax_tmp.get_yaxis().set_visible(False)
-        state_legend.append(ax_tmp)
-    grp_ittrs = [0]*40
-    for i in range(len(make_states)):
+        #state_legend.append(ax_tmp)
         s_ = ''
         grp, S = make_states[i]
-        print(S)
         for y in range(gridsz[0]):
             for x in range(gridsz[1]):
                 if (x==S[0] and y==S[1]):   s_ += 'A'
@@ -279,12 +277,15 @@ def _make_str3(gs, make_states,gridsz, grp_colors, used_clrs):
                 else: s_ += '-'
             s_ += '\n'
 
-        state_legend[i].text(0, -1.0, s_, \
+        #state_legend[i].text(0, -1.0, s_, \
+        ax_tmp.text(0, -1.0, s_, \
                 horizontalalignment='left',\
                 verticalalignment='center', family='monospace')
-        state_legend[i].add_patch( patches.Rectangle\
+        #state_legend[i].add_patch( patches.Rectangle\
+        ax_tmp.add_patch( patches.Rectangle\
                 ( (0,0), 1, 1, \
-                color=grp_colors[grp[0]][grp_ittrs[grp[0]]]))
+                color=grp_colors[grp[0]-1][grp_ittrs[grp[0]]]))
+
         grp_ittrs[grp[0]] += 1
     return ''
 
@@ -339,11 +340,15 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
         raise Exception("Please tell me if this is egocentric, allocentric, etc")
 
     Tr = smooth(tr, smoothing)
-    if tf: Te = smooth(te, smoothing//(tf//2))
+    if tf: Te = smooth(te, max(4, smoothing//tf))
     else:  Te = smooth(te, smoothing)
     if twoplots: 
         Tr2 = smooth(tr2, smoothing)
-        if tf: Te2 = smooth(te, smoothing//(tf//2))
+        if tf: 
+            try: 
+                Te2 = smooth(te, smoothing//(tf//2))
+            except: 
+                Te2 = smooth(te, smoothing)
         else:  Te2 = smooth(te, smoothing)
 
     #f,ax = plt.subplots(2,2, sharex=True, sharey=True)
@@ -376,64 +381,80 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
 #        grp1_colors_te = ['#ff1a1a','#ffcccc','#990000','#ff8080','#e60000','#cc0000'] # reds
 #        grp2_colors_te = ['#000080','#6666ff','#9999ff','#3333ff','#ccccff','#0000cc'] # blues
 #        grp3_colors_te = ['#ffde7a','#ffd145','#ffc000','#dba602','#c19204','#987301'] # oranges
-        grp_colors = [[‘#3333ff','#000080','#9999ff','#ccccff','#0000cc','#6666ff'], # blues
-                 ['#00cccc','#008080','#80ffff','#ccffff','#009999','#00ffff'], # cyans
-                 ['#7fb77b','#496b47','#afffa9','#cfffcc','#5e895b','#9ae095'], # lightgreens
-                 ['#e60000','#990000','#ff8080','#ffcccc','#cc0000','#ff1a1a'], # reds
-                 ['#ff66a3','#e6005c','#ffcce0','#ffe6f0','#ff1a75','#ff99c2'], # pinks
-                 ['#dba602','#987301','#ffd145','#ffde7a','#c19204','#ffc000']] # oranges
+        grp_colors =[['#3333ff','#000080','#9999ff','#ccccff','#0000cc','#6666ff'], # blues
+                     ['#e60000','#990000','#ff8080','#ffcccc','#cc0000','#ff1a1a'], # reds
+                     ['#dba602','#987301','#ffd145','#ffde7a','#c19204','#ffc000'], # oranges
+                     ['#7fb77b','#496b47','#afffa9','#cfffcc','#5e895b','#9ae095'], # lightgreens
+                     ['#00cccc','#008080','#80ffff','#ccffff','#009999','#00ffff'], # cyans
+                     ['#ff66a3','#e6005c','#ffcce0','#ffe6f0','#ff1a75','#ff99c2']] # pinks
         g1,g2,g3 = 0,0,0
     else: accessible_states='all'
 
     used_clrs = []
-    print(len(states), Tr.shape[1])
-#    print(len(states))
-#    for i in range(len(accessible_states) if not accessible_states=='all' else Tr.shape[1]):
-    Used_CLRS = []
+#    incl = np.zeros(Tr.shape, dtype=bool)
+    incl = []
     for i in range(len(states)):
         if not accessible_states=='all':
             grp = get_group(states[i], statemap, Tr.shape[1])
-            print(grp)
             if len(grp)==0: # ie, no group
                 continue
+#            incl[i,:] = True
+            incl.append(i)
             if not grp: raise Exception(str(states[i]))
             if grp[0]==1: 
-                lc = grp_colors[0][g1]
-                dc = grp_colors[1][g1]
+                clr = grp_colors[0][g1]
                 used_clrs.append( (1, g1) )
                 g1+=1
             if grp[0]==2: 
-                lc = grp_colors[2][g2]
-                dc = grp_colors[3][g2]
+                clr = grp_colors[1][g2]
                 used_clrs.append( (2, g2) )
                 g2+=1
             if grp[0]==3: 
-                lc = grp_colors[4][g3]
-                dc = grp_colors[5][g3]
+                clr = grp_colors[2][g3]
                 used_clrs.append( (3, g3) )
                 g3+=1
-            ax[(0,0)].plot(Tr[:,i], c=lc)
-            ax[(0,1)].plot(Te[:,i], c=lc)
+            ax[(0,0)].plot(Tr[:,i]+i*5e-4*(-1)**i, c=clr)
+            ax[(0,1)].plot(Te[:,i]+i*5e-4*(-1)**i, c=clr)
             if twoplots:
-                ax[(0,0)].plot(Tr2[:,i], c=dc)
-                ax[(0,1)].plot(Te2[:,i], c=dc)
+                ax[(0,0)].plot(Tr2[:,i]+i*5e-4*(-1)**i, c=clr)
+                ax[(0,1)].plot(Te2[:,i]+i*5e-4*(-1)**i, c=clr)
         else:
             ax[(0,0)].plot(Tr[:,i], c=colors[i])
             ax[(0,1)].plot(Te[:,i], c=colors[i])
             if twoplots:
                 ax[(0,0)].plot(Tr2[:,i], c=darkcolors[i])
                 ax[(0,1)].plot(Te2[:,i], c=darkcolors[i])
-    ax[(1,0)].plot(np.mean(Tr, axis=1), c='orange')
-    ax[(1,1)].plot(np.mean(Te, axis=1), c='orange')
+
+    if not accessible_states=='all':
+        ax[(1,0)].plot(np.mean(Tr[:,incl], axis=1), c='orange')
+        ax[(1,1)].plot(np.mean(Te[:,incl], axis=1), c='orange')
+        if twoplots:
+            ax[(1,0)].plot(np.mean(Tr2[:,incl], axis=1), c='black')
+            ax[(1,1)].plot(np.mean(Te2[:,incl], axis=1), c='black')
+    else:
+        ax[(1,0)].plot(np.mean(Tr, axis=1), c='orange')
+        ax[(1,1)].plot(np.mean(Te, axis=1), c='orange')
+        if twoplots:
+            ax[(1,0)].plot(np.mean(Tr2, axis=1), c='black')
+            ax[(1,1)].plot(np.mean(Te2, axis=1), c='black')
+
     if curr and curr.which_ids=='r, u, ru-diag only':
         ax[(1,0)].plot([2*(3**-1)]*Tr.shape[0], c='green')
         ax[(1,1)].plot([2*(3**-1)]*Tr.shape[0], c='green')
+    elif curr and curr.which_ids=='all diag':
+        ax[(1,0)].plot([0.5]*Tr.shape[0], c='green')
+        ax[(1,1)].plot([0.5]*Tr.shape[0], c='green')
+    elif curr and curr.which_ids=='r or u only':
+        ax[(1,0)].plot([0.4]*Tr.shape[0], c='green')
+        ax[(1,1)].plot([0.4]*Tr.shape[0], c='green')
+        ax[(1,0)].plot([0.8]*Tr.shape[0], c='green')
+        ax[(1,1)].plot([0.8]*Tr.shape[0], c='green')
+    elif curr and curr.which_ids=='any1step, u r diag':
+        ax[(1,0)].plot([0.8]*Tr.shape[0], c='green')
+        ax[(1,1)].plot([0.8]*Tr.shape[0], c='green')
     else:
         ax[(1,0)].plot([3**-1]*Tr.shape[0], c='green')
         ax[(1,1)].plot([3**-1]*Tr.shape[0], c='green')
-    if twoplots:
-        ax[(1,0)].plot(np.mean(Tr2, axis=1), c='black')
-        ax[(1,1)].plot(np.mean(Te2, axis=1), c='black')
     ax[(0,0)].set_ylabel("accuracy per epoch by start state")
     ax[(1,0)].set_ylabel("accuracy per epoch")
     ax[(1,0)].set_xlabel("Training")
@@ -452,7 +473,7 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
             c = { 1: 'pinks/reds', 2: 'cyans/blues', 3: 'lightgreens/oranges' }[grp[0]]
             make_states.append((grp,st))
         #cnames =['pink/red   ','cyan/blue  ','lightgreens/oranges'] 
-        s2 += '\n    '+c+':\n'+ _make_str3(gs, make_states,(7,7),grp_colors,used_clrs)
+        s2 += '\n'+ _make_str3(gs, make_states,(7,7),grp_colors,used_clrs)
     elif not states==None and Tr.shape[1]>4:
         s2 += _make_str2(states,(7,7), -1, colors, darkcolors)
 
@@ -463,8 +484,8 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
             s2 += '\nDark / black: '+centric[1]
             fs = 14
         elif not accessible_states=='all':
-            s2 += '\nfoo: '+centric[0]
-            s2 += '\nbar: '+centric[1]
+            s2 += '\norange: '+centric[0]
+            s2 += '\nblack: '+centric[1]
             fs = 10
         elif Tr.shape[1]>4:
             s2 += '\nblues: '+centric[0]

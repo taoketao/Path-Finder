@@ -57,7 +57,7 @@ class experiment(object):
         else:
             self.seed = 0
         if mode=='ego-allo-test':
-            self.dest = './storage/5-31/dev7'
+            self.dest = './storage/6-01/dev-4/'
             if not os.path.exists(self.dest): os.makedirs(self.dest)
             self.nsamples = 1
             self.curseeds = list(range(self.seed,self.seed+self.nsamples))
@@ -83,7 +83,10 @@ class experiment(object):
         '''------------------'''
         ''' Options to edit: '''
         '''------------------'''
-        _training_epochs = [100]
+        _training_epochs = [60]
+#        mnas = [ 2, '2_anneal_linear_b300_e800', '2_anneal_linear_b100_e1000' ] 
+        #mnas = [ '2_anneal_linear_b0_e750', '2_anneal_linear_b1000_e1050' ] 
+        mnas = [ '2_anneal_linear_b1000_e2000', '2_anneal_linear_b500_e1000' ] 
         mnas = [ 2 ] 
         gameversions = [ 'v2-a_fixedloc_leq' ]
         loss_fns = [ 'huber3e-5' ]
@@ -97,21 +100,31 @@ class experiment(object):
 #        for i in range(_training_epochs[0]//1000-1):
 #            for j in range(i+1,_training_epochs[0]//1000):
 #                timings.append({'b1':i*1000, 'e1':j*1000})
-        curricula += CurriculumGenerator( scheme='default', inp={\
-                    'schedule kind': 'linear anneal', 'which ids':'r, u, ru-diag only', \
-                    'schedule strengths': '20-80 flat group 1', \
-                    'schedule timings': {'b1':10, 'e1':30 }})
-                    #] } )#{'b1':0,'e1':5000},{'b1':1000, 'e1':5000},{'b1':4000, 'e1':8000},\
 #        curricula += CurriculumGenerator( scheme='cross parameters', inp={\
+#                    #'schedule kind': 'linear anneal', 'which ids':'r, u, ru-diag only', \
+#                    #'schedule kind': 'linear anneal', 'which ids':'any1step, u r diag', \
+#                    'schedule kind': 'no anneal', \
+#                    'which ids':['all diag', 'any1step, u r diag', 'r, u, ru-diag only'], \
+#                    'schedule strengths': ['20-80 flat group 1'], \
+#                    'schedule timings': [{'t1':750}, {'t1':1000}, {'t1':1250}] })
+#        curricula += CurriculumGenerator( scheme='cross parameters', inp={\
+#                    #'schedule kind': 'linear anneal', 'which ids':'r, u, ru-diag only', \
+#                    #'schedule kind': 'linear anneal', 'which ids':'any1step, u r diag', \
+#                    'schedule kind': 'linear anneal', \
+#                    'which ids':['all diag', 'any1step, u r diag', 'r, u, ru-diag only'], \
+#                    'schedule strengths': ['20-80 flat group 1','egalitarian'], \
+#                    'schedule timings': [{'b1':1000, 'e1':2000 }]})
+#                    #] } )#{'b1':0,'e1':5000},{'b1':1000, 'e1':5000},{'b1':4000, 'e1':8000},\
+##        curricula += CurriculumGenerator( scheme='cross parameters', inp={\
 #                    'schedule kind': 'no anneal', 'which ids':'r, u, ru-diag only', \
 #                    'schedule strengths': ['egalitarian', '20-80 flat group 1'], \
 #                    'schedule timings': [ {'t1':500},  {'t1':1000}, {'t1':1500}, \
 #                                          {'t1':2000}, {'t1':3000}  ] } )
-#        curricula += CurriculumGenerator( inp={\
-#                    'schedule kind': 'uniform', 'which ids':'r, u, ru-diag only'} )
+        curricula += CurriculumGenerator( inp={\
+                    'schedule kind': 'uniform', 'which ids':'1step'} )
 #
-#        curricula += [ \
-#            CurriculumGenerator( { 'schedule kind':'uniform', 'which ids': '1step' } ),\
+#        curricula = CurriculumGenerator( { 'schedule kind':'uniform', 'which ids': 'all diag' } )
+#        curricula += CurriculumGenerator( { 'schedule kind':'uniform', 'which ids': 'r, u, ru-diag only' } )
 #            CurriculumGenerator( { 'schedule kind':'uniform', 'which ids': '1step split' } )]
 #            CurriculumGenerator( { 'schedule kind':'uniform', 'which ids': \
 #                    'any1step, u r diag', 'schedule strengths':'egalitarian',
@@ -127,7 +140,7 @@ class experiment(object):
 
         #lrs = [ 4e-4 ]
         lrs = [ 3e-4 ]
-        epsilons = [ 5e-1 ]#, 4e-1, 'decay_995' ]
+        epsilons = [ 8e-1 ]#, 4e-1, 'decay_995' ]
         optimizers = [ ['adam',1e-6] ] 
         network_sizes = [\
                 ('fc',64),\
@@ -137,8 +150,8 @@ class experiment(object):
         data_modes = ['shuffled']
 #        smoothing = 100 # <- Adjust for plotting: higher=smoother
 #        self.test_frequency = 10
-        smoothing = 5 # <- Adjust for plotting: higher=smoother
-        self.test_frequency = 5
+        smoothing = 20 # <- Adjust for plotting: higher=smoother
+        self.test_frequency = 20
 
         '''--------------------------'''
         ''' end of recommended edits '''

@@ -108,8 +108,9 @@ class session_results(object):
 
 def CurriculumGenerator(inp, scheme=None):
     ''' Generates numerous curricula according to a scheme. '''
-    if scheme==None and type(inp)==dict and 'schedule kind' in inp.keys() and \
-            'which ids' in inp.keys(): scheme = 'default'
+#    if scheme==None and type(inp)==dict and 'schedule kind' in inp.keys() and \
+#            'which ids' in inp.keys(): scheme = 'default'
+    if scheme==None: scheme='default'
 
     def repeat_specs(List, ncopies):
         newL = [None]*(ncopies*len(List))
@@ -189,7 +190,7 @@ class CurriculumSpecifier(object):
             'r or u only': { (1,): {'_u','_r'}, (2,): {'ru'}, (3,): {'rr','uu'} }, \
             'uu ur': { (1,): {'_l','_d','_u','_r'}, (2,): {'ru'}, (3,): {'uu'} }, \
             'poles': { (1,): {'_l','_d','_u','_r'}, (2,): {'rr','ll'} }, \
-            'all diag': { (1,): {'_u','_r','_l','_r'}, (2,): {'dl','dr','lu','ru'} },\
+            'all diag': { (1,): {'_u','_d','_l','_r'}, (2,): {'dl','dr','lu','ru'} },\
             '1step': { (1,): {'_u','_d','_l','_r'} }, \
             '1step split': { (1,): {'_u','_d'}, (2,):{'_l','_r'} }, \
           }[which]
@@ -720,7 +721,7 @@ class reinforcement_b(object):
                     next_states = [(i,self.init_states[i]) for i in order]
                 else: raise Exception("Provided or default data mode not "+\
                             "implemented or not provided..")
-            if not last_test_eps: last_test_eps=[None]*len(next_states)
+            if not last_test_eps: last_test_eps=[0]*len(next_states)
 
             ep_losses = None
             for __mode in ['train', 'test']:
@@ -767,14 +768,17 @@ class reinforcement_b(object):
 #            if gethostname()=='PDP' and epoch==1000: 
 #                call(['nvidia-smi'])
 
-            if (epoch%1000==0 and epoch>0) or (epoch==self.training_epochs-1)\
+            if (self.training_epochs > 4000 and epoch%1000==0 and epoch>0) \
+                 or (self.training_epochs < 4000 and epoch%200==0 and epoch>0) \
+                    or (epoch==self.training_epochs-1)\
                     or (epoch<=params['disp_avg_losses'] and epoch%5==0): 
                 s = "Epoch #"+str(epoch)+"/"+str(self.training_epochs)
                 s += '\tlast '+str(params['disp_avg_losses'])+' losses'+\
                         ' averaged over all states:'
                 s += '  '+str(np.mean(np.array(last_n_test_losses)))
                 s += '  and successes:' 
-                s += '  '+str(np.mean(np.array(last_n_successes)))
+                s += '  '+str(np.mean(np.array(last_n_successes)*\
+                        len(last_n_successes[0])/self.curriculum.nstates ))
                 print(s) # Batch mode!
 
                 if not params['printing']: 
