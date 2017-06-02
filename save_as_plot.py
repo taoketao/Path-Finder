@@ -331,7 +331,7 @@ def get_group(st, statemap, l):
     return grp
 
 def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
-        tr2=None, te2=None, curr=None, statemap=None, tf=None):
+        tr2=None, te2=None, curr=None, statemap=None, tf=None, dest=None):
     if states==None:
         raise Exception()
     #f, ax = plt.subplots(lX*2, lY*2, sharex=True)
@@ -396,6 +396,7 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
     used_clrs = []
 #    incl = np.zeros(Tr.shape, dtype=bool)
     incl = []
+    #STATES = [pickle.load(open(os.path.join(dest, 'statesdir','state_'+str(i)),'rb')) for i in range(12)]
     for i in range(len(states)):
         if not accessible_states=='all':
             grp = get_group(states[i], statemap, Tr.shape[1])
@@ -428,12 +429,14 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
                 ax[(0,0)].plot(Tr2[:,i], c=darkcolors[i])
                 ax[(0,1)].plot(Te2[:,i], c=darkcolors[i])
 
+    print("Num states:",len(incl), incl)
+    ns = len(incl)
     if not accessible_states=='all':
-        ax[(1,0)].plot(np.mean(Tr[:,incl], axis=1), c='orange')
-        ax[(1,1)].plot(np.mean(Te[:,incl], axis=1), c='orange')
+        ax[(1,0)].plot(np.sum(Tr, axis=1)/ns, c='orange')
+        ax[(1,1)].plot(np.sum(Te, axis=1)/ns, c='orange')
         if twoplots:
-            ax[(1,0)].plot(np.mean(Tr2[:,incl], axis=1), c='black')
-            ax[(1,1)].plot(np.mean(Te2[:,incl], axis=1), c='black')
+            ax[(1,0)].plot(np.mean(Tr2, axis=1)/ns, c='black')
+            ax[(1,1)].plot(np.mean(Te2, axis=1)/ns, c='black')
     else:
         ax[(1,0)].plot(np.mean(Tr, axis=1), c='orange')
         ax[(1,1)].plot(np.mean(Te, axis=1), c='orange')
