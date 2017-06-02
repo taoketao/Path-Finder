@@ -24,7 +24,7 @@ ACTIONS = [UDIR, RDIR, DDIR, LDIR]
 ACTION_NAMES = { UDIR:"UDIR", DDIR:"DDIR", RDIR:"RDIR", LDIR:"LDIR" }
 P_ACTION_NAMES = { UDIR:"^U^", DDIR:"vDv", RDIR:"R>>", LDIR:"<<L" }
 DEFAULT_EPSILON = 0.9
-DEFAULT_BATCH_SIZE = 16
+DEFAULT_BATCH_SIZE = 48
 ALL=-1
 A_LAYER=0
 G_LAYER=1
@@ -319,6 +319,7 @@ class Scheduler(object):
         ''' >>>>    Curriculum schedule setup. '''
         self.curriculum = override['curriculum'] 
         self.batchsize = max(DEFAULT_BATCH_SIZE, len(init_states))
+#        self.batchsize = len(init_states)
         if type(self.curriculum)==str and self.curriculum=='uniform':
             pass # for now...
         elif type(self.curriculum)==str and ('linear_anneal' in self.curriculum\
@@ -728,13 +729,15 @@ class reinforcement_b(object):
                 if __mode=='train': 
                     states = next_states
                 else:
-                    n_inits = len(self.init_states)
-                    samp = np.append(np.arange(n_inits), np.random.choice(\
-                            range(n_inits), self.scheduler.batchsize-n_inits)) 
-                    states = [(i,self.init_states[i]) for i in samp]
+#                    n_inits = len(self.init_states)
+#                    samp = np.append(np.arange(n_inits), np.random.choice(\
+#                            range(n_inits), self.scheduler.batchsize-n_inits)) 
+#                    states = [(i,self.init_states[i]) for i in samp]
+                    states = [tup for tup in enumerate(self.init_states)]
                 if __mode=='test' and epoch>0 and \
                             not epoch % params['test_frequency']==0:
                     # Use previously stored test values
+                    print(last_test_eps, samp)
                     for si in range(len(states)):
                         #episode_results.put(epoch, si, episode_results._get(epoch-1,si,'test'))
                         episode_results.put(epoch, si, last_test_eps[si])

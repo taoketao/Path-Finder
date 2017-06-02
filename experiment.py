@@ -83,7 +83,7 @@ class experiment(object):
         '''------------------'''
         ''' Options to edit: '''
         '''------------------'''
-        _training_epochs = [60]
+        _training_epochs = [600]
 #        mnas = [ 2, '2_anneal_linear_b300_e800', '2_anneal_linear_b100_e1000' ] 
         #mnas = [ '2_anneal_linear_b0_e750', '2_anneal_linear_b1000_e1050' ] 
         mnas = [ '2_anneal_linear_b1000_e2000', '2_anneal_linear_b500_e1000' ] 
@@ -121,7 +121,7 @@ class experiment(object):
 #                    'schedule timings': [ {'t1':500},  {'t1':1000}, {'t1':1500}, \
 #                                          {'t1':2000}, {'t1':3000}  ] } )
         curricula += CurriculumGenerator( inp={\
-                    'schedule kind': 'uniform', 'which ids':'1step'} )
+                    'schedule kind': 'uniform', 'which ids':'1step split'} )
 #
 #        curricula = CurriculumGenerator( { 'schedule kind':'uniform', 'which ids': 'all diag' } )
 #        curricula += CurriculumGenerator( { 'schedule kind':'uniform', 'which ids': 'r, u, ru-diag only' } )
@@ -150,8 +150,8 @@ class experiment(object):
         data_modes = ['shuffled']
 #        smoothing = 100 # <- Adjust for plotting: higher=smoother
 #        self.test_frequency = 10
-        smoothing = 20 # <- Adjust for plotting: higher=smoother
-        self.test_frequency = 20
+        smoothing = 1 # <- Adjust for plotting: higher=smoother
+        self.test_frequency = 1
 
         '''--------------------------'''
         ''' end of recommended edits '''
@@ -293,7 +293,8 @@ class experiment(object):
             Tr_Successes.append(results.get('train', 'successes'))
             test_results = results.get('test', 'successes')
             Te_Successes.append(test_results)
-            if training_epochs > 30 and len(s)>0:
+            #if training_epochs > 30 and len(s)>0:
+            if True:
                 s_ = s+' sample #'+str(ri)+' last 30 test accs: '+'\n'+\
                         str(test_results[-30:])+'\n'
                 try:    self.fin_logfile.write(unicode(s_))
