@@ -376,12 +376,12 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
 #        grp1_colors_te = ['#ff1a1a','#ffcccc','#990000','#ff8080','#e60000','#cc0000'] # reds
 #        grp2_colors_te = ['#000080','#6666ff','#9999ff','#3333ff','#ccccff','#0000cc'] # blues
 #        grp3_colors_te = ['#ffde7a','#ffd145','#ffc000','#dba602','#c19204','#987301'] # oranges
-        grp_colors = [['#3333ff','#ccccff','#0000cc','#9999ff','#000080','#6666ff'], # blues
-                      ['#00cccc','#ccffff','#009999','#80ffff','#008080','#00ffff'], # cyans
-                      ['#7fb77b','#cfffcc','#5e895b','#afffa9','#496b47','#9ae095'], # lightgreens
-                      ['#e60000','#ffcccc','#cc0000','#ff8080','#990000','#ff1a1a'], # reds
-                      ['#ff66a3','#ffe6f0','#ff1a75','#ffcce0','#e6005c','#ff99c2'], # pinks
-                      ['#dba602','#ffde7a','#c19204','#ffd145','#987301','#ffc000']] # oranges
+        grp_colors = [[‘#3333ff','#000080','#9999ff','#ccccff','#0000cc','#6666ff'], # blues
+                 ['#00cccc','#008080','#80ffff','#ccffff','#009999','#00ffff'], # cyans
+                 ['#7fb77b','#496b47','#afffa9','#cfffcc','#5e895b','#9ae095'], # lightgreens
+                 ['#e60000','#990000','#ff8080','#ffcccc','#cc0000','#ff1a1a'], # reds
+                 ['#ff66a3','#e6005c','#ffcce0','#ffe6f0','#ff1a75','#ff99c2'], # pinks
+                 ['#dba602','#987301','#ffd145','#ffde7a','#c19204','#ffc000']] # oranges
         g1,g2,g3 = 0,0,0
     else: accessible_states='all'
 
