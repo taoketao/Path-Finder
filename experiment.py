@@ -57,7 +57,7 @@ class experiment(object):
         else:
             self.seed = 0
         if mode=='ego-allo-test':
-            self.dest = './storage/6-01/dev-5/'
+            self.dest = './storage/6-01/dev-15/'
             if not os.path.exists(self.dest): os.makedirs(self.dest)
             self.nsamples = 1
             self.curseeds = list(range(self.seed,self.seed+self.nsamples))
@@ -83,7 +83,7 @@ class experiment(object):
         '''------------------'''
         ''' Options to edit: '''
         '''------------------'''
-        _training_epochs = [100]
+        _training_epochs = [1000]
 #        mnas = [ 2, '2_anneal_linear_b300_e800', '2_anneal_linear_b100_e1000' ] 
         #mnas = [ '2_anneal_linear_b0_e750', '2_anneal_linear_b1000_e1050' ] 
         mnas = [ '2_anneal_linear_b1000_e2000', '2_anneal_linear_b500_e1000' ] 
@@ -115,13 +115,12 @@ class experiment(object):
 #                    'schedule strengths': ['20-80 flat group 1','egalitarian'], \
 #                    'schedule timings': [{'b1':1000, 'e1':2000 }]})
 #                    #] } )#{'b1':0,'e1':5000},{'b1':1000, 'e1':5000},{'b1':4000, 'e1':8000},\
-##        curricula += CurriculumGenerator( scheme='cross parameters', inp={\
-#                    'schedule kind': 'no anneal', 'which ids':'r, u, ru-diag only', \
-#                    'schedule strengths': ['egalitarian', '20-80 flat group 1'], \
-#                    'schedule timings': [ {'t1':500},  {'t1':1000}, {'t1':1500}, \
-#                                          {'t1':2000}, {'t1':3000}  ] } )
-        curricula += CurriculumGenerator( inp={\
-                    'schedule kind': 'uniform', 'which ids':'1step split'} )
+        curricula += CurriculumGenerator( scheme='cross parameters', inp={\
+                    'schedule kind': 'no anneal', 'which ids':'r, u, ru-diag only', \
+                    'schedule strengths': ['20-80 flat group 1'], \
+                    'schedule timings': [ {'t1':200} ]})
+#        curricula += CurriculumGenerator( inp={\
+#                    'schedule kind': 'uniform', 'which ids':'1step split'} )
 #
 #        curricula = CurriculumGenerator( { 'schedule kind':'uniform', 'which ids': 'all diag' } )
 #        curricula += CurriculumGenerator( { 'schedule kind':'uniform', 'which ids': 'r, u, ru-diag only' } )
