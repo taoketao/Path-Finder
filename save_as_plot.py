@@ -267,86 +267,26 @@ def _make_str3(gs, make_states,gridsz, grp_colors, used_clrs):
         ax_tmp.get_xaxis().set_visible(False)
         ax_tmp.get_yaxis().set_visible(False)
         state_legend.append(ax_tmp)
-    ittr=0
-#    X, Y = plt.gcf().get_dpi() * plt.gcf().get_size_inches()
-#    h = int(Y / gsg[0])
-#    w = int(X / gsg[1])
-##    print(X,Y,h,w)
-#    h = int(gsg[0])
-#    w = int(gsg[1])
-#    print(X,Y,h,w)
-    s='\nStates:\n'
-    for which in range(int(ceil(len(make_states)/4.0))):
-        s += '\n'
-        #print(make_states, grp_colors); sys.exit()
-#        s += '  '.join([cnames[s[0][0]-1] for s in \
-#                make_states[which*3:(which+1)*3]])+'\n'
-#        print(h*(ittr//gsg[0]), w*(ittr%gsg[1]), 0.1, 0.1, used_clrs[ittr], grp_colors[used_clrs[ittr][0]][used_clrs[ittr][1]])
+    grp_ittrs = [0]*40
+    for i in range(len(make_states)):
+        s_ = ''
+        grp, S = make_states[i]
+        print(S)
+        for y in range(gridsz[0]):
+            for x in range(gridsz[1]):
+                if (x==S[0] and y==S[1]):   s_ += 'A'
+                elif (x==S[2] and y==S[3]): s_ += 'G'
+                else: s_ += '-'
+            s_ += '\n'
 
-        s1=s2=s3=''
-        for i in range(gridsz[0]):
-            for j in range(gridsz[1]):
-                S = make_states[which*2][1]
-                if (i==S[1] and j==S[0]):   s += 'A'; s1 += 'A'
-                elif (i==S[3] and j==S[2]): s += 'G'; s1 += 'G'
-                else: s += '-'; s1 += '- '
-            s+='      '
-            if not which*3+1>=len(make_states):
-                for j in range(gridsz[1]):
-                    S = make_states[which*2+1][1]
-                    if (i==S[1] and j==S[0]):   s += 'A'; s2 += 'A'
-                    elif (i==S[3] and j==S[2]): s += 'G'; s2 += 'G'
-                    else: s += '-'; s2 += '- '
-                s+='      '
-                if not which*3+2>=len(make_states):
-                    for j in range(gridsz[1]):
-                        S = make_states[which*2+2][1]
-                        if (i==S[1] and j==S[0]):   s += 'A'; s3 += 'A'
-                        elif (i==S[3] and j==S[2]): s += 'G'; s3 += 'G'
-                        else: s += '-'; s3 += '- '
-                    if not i==gridsz[0]-1:
-                        s += '\n'
-                else: s += '\n' 
-            else: s += '\n' 
-            s1 += '\n'; s2 += '\n'; s3 += '\n'
-
-        grp_ittrs = [0]*40
-        for i in range(len(make_states)):
-            s_ = ''
-            grp, S = make_states[i]
-            print(S)
-            for y in range(gridsz[0]):
-                for x in range(gridsz[1]):
-                    if (x==S[0] and y==S[1]):   s_ += 'A'
-                    elif (x==S[2] and y==S[3]): s_ += 'G'
-                    else: s_ += '-'
-                s_ += '\n'
-
-#            xi_text = w*gsg[1]
-
-            state_legend[i].text(0, -1.0, s_, \
-                    horizontalalignment='left',\
-                    verticalalignment='center', family='monospace')
-#            state_legend[i].text(1, -1.0, s_, \
-#                    horizontalalignment='left',\
-#                    verticalalignment='center', family='monospace')
-#            print('->>', h*(6*ittr//gsg[0]), xi_line, xf_line)
-            print(grp[0], grp_ittrs[grp[0]])
-            state_legend[i].add_patch( patches.Rectangle\
-                    ( (0,0), 1, 1, \
-                    #color=grp_colors[grp_ittrs[grp[0]]][grp[0]]))
-                    color=grp_colors[grp[0]][grp_ittrs[grp[0]]]))
-#                                    [grp][1]))
-#                    color=grp_colors[used_clrs[grp][0]]\
-#                                    [used_clrs[grp][1]]))
-#            state_legend[ittr].hlines(h*(10*ittr//gsg[0]),\
-#                    xi_line, xf_line, \
-#                    linewidth = 0.5)
-            ittr += 1
-            grp_ittrs[grp[0]] += 1
-
-        s += '\n'
-    return s
+        state_legend[i].text(0, -1.0, s_, \
+                horizontalalignment='left',\
+                verticalalignment='center', family='monospace')
+        state_legend[i].add_patch( patches.Rectangle\
+                ( (0,0), 1, 1, \
+                color=grp_colors[grp[0]][grp_ittrs[grp[0]]]))
+        grp_ittrs[grp[0]] += 1
+    return ''
 
 
 
