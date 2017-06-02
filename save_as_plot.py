@@ -1,9 +1,9 @@
 import sys, os, time 
 import numpy as np
-import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')
-from matplotlib import gridspec, font_manager
+import matplotlib.pyplot as plt
+from matplotlib import gridspec, font_manager, patches
 from math import ceil, floor
 from functools import reduce
 from reinforcement_batch import *
@@ -258,37 +258,93 @@ def _make_str2(states, gridsz, trte, c1, c2):
     return s
 
 
-def _make_str3(make_states,gridsz, grp_colors):
+def _make_str3(gs, make_states,gridsz, grp_colors, used_clrs):
+    ndivs = 4
+    state_legend = []
+    gsg = gs.get_geometry()
+    for ittr in range(len(make_states)):
+        ax_tmp = plt.subplot(gs[2*(ittr//ndivs), 8+ittr%ndivs])
+        ax_tmp.get_xaxis().set_visible(False)
+        ax_tmp.get_yaxis().set_visible(False)
+        state_legend.append(ax_tmp)
+    ittr=0
+#    X, Y = plt.gcf().get_dpi() * plt.gcf().get_size_inches()
+#    h = int(Y / gsg[0])
+#    w = int(X / gsg[1])
+##    print(X,Y,h,w)
+#    h = int(gsg[0])
+#    w = int(gsg[1])
+#    print(X,Y,h,w)
     s='\nStates:\n'
-    for which in range(int(ceil(len(make_states)/3.0))):
+    for which in range(int(ceil(len(make_states)/4.0))):
         s += '\n'
-        print(make_states, grp_colors); sys.exit()
-        s += '  '.join([cnames[s[0][0]-1] for s in \
-                make_states[which*3:(which+1)*3]])+'\n'
+        #print(make_states, grp_colors); sys.exit()
+#        s += '  '.join([cnames[s[0][0]-1] for s in \
+#                make_states[which*3:(which+1)*3]])+'\n'
+#        print(h*(ittr//gsg[0]), w*(ittr%gsg[1]), 0.1, 0.1, used_clrs[ittr], grp_colors[used_clrs[ittr][0]][used_clrs[ittr][1]])
+
+        s1=s2=s3=''
         for i in range(gridsz[0]):
             for j in range(gridsz[1]):
                 S = make_states[which*2][1]
-                if (i==S[1] and j==S[0]):   s += 'A'
-                elif (i==S[3] and j==S[2]): s += 'G'
-                else: s += '-'
+                if (i==S[1] and j==S[0]):   s += 'A'; s1 += 'A'
+                elif (i==S[3] and j==S[2]): s += 'G'; s1 += 'G'
+                else: s += '-'; s1 += '- '
             s+='      '
             if not which*3+1>=len(make_states):
                 for j in range(gridsz[1]):
                     S = make_states[which*2+1][1]
-                    if (i==S[1] and j==S[0]):   s += 'A'
-                    elif (i==S[3] and j==S[2]): s += 'G'
-                    else: s += '-'
+                    if (i==S[1] and j==S[0]):   s += 'A'; s2 += 'A'
+                    elif (i==S[3] and j==S[2]): s += 'G'; s2 += 'G'
+                    else: s += '-'; s2 += '- '
                 s+='      '
                 if not which*3+2>=len(make_states):
                     for j in range(gridsz[1]):
                         S = make_states[which*2+2][1]
-                        if (i==S[1] and j==S[0]):   s += 'A'
-                        elif (i==S[3] and j==S[2]): s += 'G'
-                        else: s += '-'
+                        if (i==S[1] and j==S[0]):   s += 'A'; s3 += 'A'
+                        elif (i==S[3] and j==S[2]): s += 'G'; s3 += 'G'
+                        else: s += '-'; s3 += '- '
                     if not i==gridsz[0]-1:
                         s += '\n'
                 else: s += '\n' 
             else: s += '\n' 
+            s1 += '\n'; s2 += '\n'; s3 += '\n'
+
+        grp_ittrs = [0]*40
+        for i in range(len(make_states)):
+            s_ = ''
+            grp, S = make_states[i]
+            print(S)
+            for y in range(gridsz[0]):
+                for x in range(gridsz[1]):
+                    if (x==S[0] and y==S[1]):   s_ += 'A'
+                    elif (x==S[2] and y==S[3]): s_ += 'G'
+                    else: s_ += '-'
+                s_ += '\n'
+
+#            xi_text = w*gsg[1]
+
+            state_legend[i].text(0, -1.0, s_, \
+                    horizontalalignment='left',\
+                    verticalalignment='center', family='monospace')
+#            state_legend[i].text(1, -1.0, s_, \
+#                    horizontalalignment='left',\
+#                    verticalalignment='center', family='monospace')
+#            print('->>', h*(6*ittr//gsg[0]), xi_line, xf_line)
+            print(grp[0], grp_ittrs[grp[0]])
+            state_legend[i].add_patch( patches.Rectangle\
+                    ( (0,0), 1, 1, \
+                    #color=grp_colors[grp_ittrs[grp[0]]][grp[0]]))
+                    color=grp_colors[grp[0]][grp_ittrs[grp[0]]]))
+#                                    [grp][1]))
+#                    color=grp_colors[used_clrs[grp][0]]\
+#                                    [used_clrs[grp][1]]))
+#            state_legend[ittr].hlines(h*(10*ittr//gsg[0]),\
+#                    xi_line, xf_line, \
+#                    linewidth = 0.5)
+            ittr += 1
+            grp_ittrs[grp[0]] += 1
+
         s += '\n'
     return s
 
@@ -328,7 +384,6 @@ def get_group(st, statemap, l):
     for j in range(l):
         if statemap[j]['lex_id']==lex:
             return statemap[j]['group']
-            
     return grp
 
 def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
@@ -352,14 +407,14 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
         else:  Te2 = smooth(te, smoothing)
 
     #f,ax = plt.subplots(2,2, sharex=True, sharey=True)
-    gs = gridspec.GridSpec(2, 3)
+    gs = gridspec.GridSpec(8, 12)
     plt.subplots_adjust(\
             left=0.1, bottom=0.1, right=0.9, top=0.9, wspace=0.5, hspace=0.5)
     ax={}
-    ax[(0,0)] = plt.subplot(gs[0,0])
-    ax[(0,1)] = plt.subplot(gs[0,1], sharey = ax[(0,0)])
-    ax[(1,0)] = plt.subplot(gs[1,0], sharey = ax[(0,0)])
-    ax[(1,1)] = plt.subplot(gs[1,1], sharey = ax[(0,0)])
+    ax[(0,0)] = plt.subplot(gs[ :4, :4])
+    ax[(0,1)] = plt.subplot(gs[ :4,4:8], sharey = ax[(0,0)])
+    ax[(1,0)] = plt.subplot(gs[4: , :4], sharey = ax[(0,0)])
+    ax[(1,1)] = plt.subplot(gs[4: ,4:8], sharey = ax[(0,0)])
     plt.gca().set_ylim([-0.1,1.1])
 
 
@@ -390,23 +445,32 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
         g1,g2,g3 = 0,0,0
     else: accessible_states='all'
 
-    for i in range(Tr.shape[1]):
+    used_clrs = []
+    print(len(states), Tr.shape[1])
+#    print(len(states))
+#    for i in range(len(accessible_states) if not accessible_states=='all' else Tr.shape[1]):
+    Used_CLRS = []
+    for i in range(len(states)):
         if not accessible_states=='all':
             grp = get_group(states[i], statemap, Tr.shape[1])
+            print(grp)
             if len(grp)==0: # ie, no group
                 continue
             if not grp: raise Exception(str(states[i]))
             if grp[0]==1: 
                 lc = grp_colors[0][g1]
                 dc = grp_colors[1][g1]
+                used_clrs.append( (1, g1) )
                 g1+=1
             if grp[0]==2: 
                 lc = grp_colors[2][g2]
                 dc = grp_colors[3][g2]
+                used_clrs.append( (2, g2) )
                 g2+=1
             if grp[0]==3: 
                 lc = grp_colors[4][g3]
                 dc = grp_colors[5][g3]
+                used_clrs.append( (3, g3) )
                 g3+=1
             ax[(0,0)].plot(Tr[:,i], c=lc)
             ax[(0,1)].plot(Te[:,i], c=lc)
@@ -448,7 +512,7 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
             c = { 1: 'pinks/reds', 2: 'cyans/blues', 3: 'lightgreens/oranges' }[grp[0]]
             make_states.append((grp,st))
         #cnames =['pink/red   ','cyan/blue  ','lightgreens/oranges'] 
-        s2 += '\n    '+c+':\n'+ _make_str3(make_states,(7,7),grp_colors)
+        s2 += '\n    '+c+':\n'+ _make_str3(gs, make_states,(7,7),grp_colors,used_clrs)
     elif not states==None and Tr.shape[1]>4:
         s2 += _make_str2(states,(7,7), -1, colors, darkcolors)
 
@@ -696,6 +760,8 @@ def save_final_losses_process(dest):
     tmp_data = []
     trials = []
     if type(dest)==list:
+        if len(dest)==1 and 'curriculum' in str(os.listdir(dest[0])):
+            dest.append( dest[0][:dest[0].rfind('/')] )
         if len(dest)>1 and 'logfile' in dest[0] and 'curriculum' in dest[1]:
             dests = [dest[0]]
             curr = ingest_curr_file(dest[1])
