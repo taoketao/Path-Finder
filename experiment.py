@@ -92,16 +92,28 @@ class experiment(object):
             <r, u, ru-diag only>, <uu ur>, <poles>, <all diag>, <1step>, <1step split> '''
         curricula = []
 #        for task_2groups in ['any1step, u r diag', 'r, u, ru-diag only', 'poles']:
-        if len(_training_epochs)>1: raise Exception()
-        timings = []
-        for i in range(_training_epochs[0]//1000-1):
-            for j in range(i+1,_training_epochs[0]//1000):
-                timings.append({'b1':i*1000, 'e1':j*1000})
+#        if len(_training_epochs)>1: raise Exception()
+#        timings = []
+#        for i in range(_training_epochs[0]//1000-1):
+#            for j in range(i+1,_training_epochs[0]//1000):
+#                timings.append({'b1':i*1000, 'e1':j*1000})
         curricula += CurriculumGenerator( scheme='default', inp={\
                     'schedule kind': 'linear anneal', 'which ids':'r, u, ru-diag only', \
                     'schedule strengths': '20-80 flat group 1', \
                     'schedule timings': {'b1':30, 'e1':60 }})
-                    #] } )#{'b1':0,'e1':5000},{'b1':1000, 'e1':5000},{'b1':4000, 'e1':8000},\
+=======
+#        if len(_training_epochs)>1: raise Exception()
+#        timings = []
+#        for i in range(_training_epochs[0]//1000-1):
+#            for j in range(i+1,_training_epochs[0]//1000):
+#                timings.append({'b1':i*1000, 'e1':j*1000})
+
+        curricula += CurriculumGenerator( scheme='default', inp={\
+                    'schedule kind': 'linear anneal', 'which ids':'r, u, ru-diag only', \
+                    'schedule strengths': ['20-80 flat group 1'], \
+                    'schedule timings': {'b1':100, 'e1':300}})
+                    #'schedule timings': timings })
+                    ] } )#{'b1':0,'e1':5000},{'b1':1000, 'e1':5000},{'b1':4000, 'e1':8000},\
 #        curricula += CurriculumGenerator( scheme='cross parameters', inp={\
 #                    'schedule kind': 'no anneal', 'which ids':'r, u, ru-diag only', \
 #                    'schedule strengths': ['egalitarian', '20-80 flat group 1'], \

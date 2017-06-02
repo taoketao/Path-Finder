@@ -311,13 +311,15 @@ class Scheduler(object):
 
     def __init__(self, data_mode, which_game, init_states, t_epchs,\
             override ):
+        self.relevants = None
         self.data_mode = data_mode
         self.mna_type = override['max_num_actions'] if \
                     'max_num_actions' in override else MAX_NUM_ACTIONS
 
         ''' >>>>    Curriculum schedule setup. '''
         self.curriculum = override['curriculum'] 
-        self.batchsize = max(DEFAULT_BATCH_SIZE, len(init_states))
+        #self.batchsize = max(DEFAULT_BATCH_SIZE, len(init_states))
+        self.batchsize = len(init_states)
         if type(self.curriculum)==str and self.curriculum=='uniform':
             pass # for now...
         elif type(self.curriculum)==str and ('linear_anneal' in self.curriculum\
@@ -417,6 +419,14 @@ class Scheduler(object):
     def getBatchSize(self): return self.batchsize
 
     ''' Curriculum scheduling. '''
+    def get_relevant_states(self):
+        if not None==self.relevants: return self.relevants
+        self.relevants = np.array( [0.0]*len(self.init_states) )
+        for i in range(len(self.init_states)):
+            my_group = self.statemap[i]['group']
+            if len(my_group)>0: self.relevants[i] = 1.0
+        return self.relevants
+
     def get_next_states(self, epoch):
         curr = self.curriculum
         #print ('\n\n',curr.toString())
@@ -440,7 +450,8 @@ class Scheduler(object):
                 raise Exception("Group not logged in this curriculum object: "+\
                         str(my_group)+'  '+str(sched_kind)+' <'+\
                         curr.which_ids +'> '+ self.statemap[i]['lex_id']+', -- '+\
-                       ', '.join([str(s) for s in [curr.begVal, curr.endVal, curr.begTime, curr.endTime]]) )
+                       ', '.join([str(s) for s in [curr.begVal, curr.endVal, \
+                       curr.begTime, curr.endTime]]) )
             #print(i, my_group, begT, endT, begS, endS)
             if endT<0: endT = self.training_epochs
             if sched_kind=='uniform':
@@ -460,7 +471,7 @@ class Scheduler(object):
         ps /= np.sum(ps)
         selections = np.random.choice(range(len(self.init_states)), \
                 self.batchsize, p=ps)
-        return [(i,self.init_states[i]) for i in selections]
+        return [(i,self.init_states[i]) for i in selections], selections
 
     def action_drop(self, epoch):
         if type(self.mna_type)==int: return False
@@ -709,7 +720,7 @@ class reinforcement_b(object):
 
             # Take pass over data.
             if not (self.curriculum == None or self.curriculum=='uniform'):
-                next_states = self.scheduler.get_next_states(epoch)
+                next_states, selections = self.scheduler.get_next_states(epoch)
             else:
                 if not self.data_mode == None: 
                     params['present_mode']=self.data_mode
@@ -723,24 +734,33 @@ class reinforcement_b(object):
             if not last_test_eps: last_test_eps=[None]*len(next_states)
 
             ep_losses = None
+            on_states = self.scheduler.get_relevant_states()
+            on_states /= np.sum(on_states)
+            n_on = len(on_states)
+
             for __mode in ['train', 'test']:
                 if __mode=='train': 
                     states = next_states
                 else:
-                    n_inits = len(self.init_states)
-                    samp = np.append(np.arange(n_inits), np.random.choice(\
-                            range(n_inits), self.scheduler.batchsize-n_inits)) 
+                    samp = np.append(np.arange(n_on), np.random.choice(range\
+                            (n_on), self.scheduler.batchsize-n_on,p=on_states)) 
+#                    states = [(i,self.init_states[i]) for i,on in \
+#                            enumerate(on_states) if on>0]
                     states = [(i,self.init_states[i]) for i in samp]
                 if __mode=='test' and epoch>0 and \
                             not epoch % params['test_frequency']==0:
                     # Use previously stored test values
                     for si in range(len(states)):
                         #episode_results.put(epoch, si, episode_results._get(epoch-1,si,'test'))
+                        if not on_states[si]: continue
                         episode_results.put(epoch, si, last_test_eps[si])
                 else:
                     num_as, goals, actns, ep_losses = \
                             self._do_batch(states, epoch, __mode)
                     for si, (_,s0) in enumerate(states):
+#                        if __mode=='test' and not on_states[si]: continue
+#                        if __mode=='train':
+#                            s0 = self.init_states[selections[si]]
                         result_info = { 's0': s0, \
                                         'num_a': num_as[si], \
                                         'success': goals[si], \

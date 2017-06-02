@@ -366,7 +366,6 @@ def get_group(st, statemap, l):
     for j in range(l):
         if statemap[j]['lex_id']==lex:
             return statemap[j]['group']
-            
     return grp
 
 def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
@@ -429,9 +428,14 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
     else: accessible_states='all'
 
     used_clrs = []
+    print(len(states), Tr.shape[1])
+#    print(len(states))
+#    for i in range(len(accessible_states) if not accessible_states=='all' else Tr.shape[1]):
+    Used_CLRS = []
     for i in range(len(states)):
         if not accessible_states=='all':
             grp = get_group(states[i], statemap, Tr.shape[1])
+            print(grp)
             if len(grp)==0: # ie, no group
                 continue
             if not grp: raise Exception(str(states[i]))
@@ -738,6 +742,8 @@ def save_final_losses_process(dest):
     tmp_data = []
     trials = []
     if type(dest)==list:
+        if len(dest)==1 and 'curriculum' in str(os.listdir(dest[0])):
+            dest.append( dest[0][:dest[0].rfind('/')] )
         if len(dest)>1 and 'logfile' in dest[0] and 'curriculum' in dest[1]:
             dests = [dest[0]]
             curr = ingest_curr_file(dest[1])
