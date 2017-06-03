@@ -57,7 +57,7 @@ class experiment(object):
         else:
             self.seed = 0
         if mode=='ego-allo-test':
-            self.dest = './storage/6-02/ego-allo-1/'
+            self.dest = './storage/6-02/ego-allo-2/'
             if not os.path.exists(self.dest): os.makedirs(self.dest)
             self.nsamples = 20
             self.curseeds = list(range(self.seed,self.seed+2*self.nsamples))

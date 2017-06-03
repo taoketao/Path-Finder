@@ -24,7 +24,7 @@ ACTIONS = [UDIR, RDIR, DDIR, LDIR]
 ACTION_NAMES = { UDIR:"UDIR", DDIR:"DDIR", RDIR:"RDIR", LDIR:"LDIR" }
 P_ACTION_NAMES = { UDIR:"^U^", DDIR:"vDv", RDIR:"R>>", LDIR:"<<L" }
 DEFAULT_EPSILON = 0.9
-DEFAULT_TRAINING_BATCH_SIZE = 4
+DEFAULT_TRAINING_BATCH_SIZE = 32
 ALL=-1
 A_LAYER=0
 G_LAYER=1
@@ -42,31 +42,33 @@ class session_results(object):
             actions_attempted: fixed size, Action ids with -1 for untaken actions,
             success: bool of whether the goal was reached,
             mode: "train" or "test"         '''
-    def __init__(self, nepochs, batchsize, n_init_states, dest, scheduler):
-    #def __init__(self, nepochs, batchsize, n_init_states, dest, schdlr):
+    def __init__(self, nepochs, batchsize, n_init_states, dest, schdlr):
         self.test_loss  = np.zeros( (nepochs, n_init_states) )
         self.test_sccs  = np.zeros( (nepochs, n_init_states) )
         self.train_loss = np.zeros( (nepochs, n_init_states, batchsize) )
         self.train_sccs = np.zeros( (nepochs, n_init_states, batchsize) )
-        self.schdlr = scheduler
-        self.lex_to_inits = {}
-    #    self.scheduler = schdlr
-    #    self.lex_map = { lx['lex_id']:i for i, lx in scheduler.statemap.items() }
+        self.savedir = dest+'statesdir/'
+        self.schdlr = schdlr
+        self.lex_to_ints = {}
+
 
     def put(self, epoch, state_id, batch_index, results_info, use_last_test_episode=False):
+        if use_last_test_episode:
+            self.test_sccs[epoch, :] = self.test_sccs[epoch-1, :]
+            self.test_loss[epoch, :] = self.test_loss[epoch-1, :]
+            return
         state_id = None
         St = results_info['s0']
         if St.lexid == None: St.lexid = self.schdlr._get_nameid(St,2)
-        if not St.lexid in self.lex_to_inits.keys():
-            self.lex_to_inits[St.lexid] = len(self.lex_to_inits)
+        if not St.lexid in self.lex_to_ints.keys():
+            self.lex_to_ints[St.lexid] = len(self.lex_to_ints)
 
-        state_id = self.lex_to_inits[St.lexid]
+        state_id = self.lex_to_ints[St.lexid]
 
         if type(results_info)==str and results_info=='last test episode':
             self.test_sccs[epoch, state_id] = self.test_sccs[epoch-1, state_id]
             self.test_loss[epoch, state_id] = self.test_loss[epoch-1, state_id]
-            return
-        if results_info['mode']=='train':
+        elif results_info['mode']=='train':
             self.train_sccs[epoch, state_id, batch_index] = results_info['success']
             self.train_loss[epoch, state_id, batch_index] = results_info['loss']
         elif results_info['mode']=='test':
@@ -318,8 +320,6 @@ class Scheduler(object):
 #                    statemap.items()]))
             # Then, refurbish get_next_states(), the rest of this init, and
             # the reinforcement process for sampling states.
-            self.lex_map = { lx['lex_id']:i for i, lx in self.statemap.items() }
-
         else:
             raise Exception("dev err 3")
         self.training_epochs = t_epchs
@@ -363,17 +363,13 @@ class Scheduler(object):
         for k,V in groups.items():
             for v in V:
                 invg[v]=k
-        tmp_states = []
         for i, st in enumerate(states):
             if not st.get_agent_loc()==(3,3) and st.gridsz==(7,7):
                 raise Exception("Lexicograph not yet implemented for these states.")
             lex_id = self._get_nameid(st, 2)
             grp = invg[lex_id] if lex_id in invg.keys() else ()
-            tmp_states.append( (lex_id, st, grp) )
-        for i, tup in enumerate(sorted(tmp_states, key=lambda tup: tup[0])):
-            statemap[i] = {'state':tup[1], 'lex_id':tup[0], 'group':tup[2] }
+            statemap[i] = {'state':st, 'lex_id':lex_id, 'group':grp }
         return statemap
-
     def _get_nameid(self, st, minchars): 
         '''  Lowercase:   _ < d < l < r < u   string inequalities hold. '''
         ax, ay = st.get_agent_loc(); gx, gy = st.get_goal_loc(); 
@@ -679,18 +675,7 @@ class reinforcement_b(object):
         tf.set_random_seed(self.seed)
 
         self.Net.adjust_lr(self.scheduler.get_init_lr())
-
         init_time = time.time()
-        static_states = []
-        #for itr,s in [(i,s.copy()) for i,s in enumerate(self.init_states)]:
-        for itr in range(len(self.init_states)):
-            s = self.scheduler.statemap[itr]['state']
-            s.lexid = self.scheduler._get_nameid(s, 2)
-            #print (s.lexid,self.scheduler.statemap[itr]['lex_id'])
-            if len(self.scheduler.statemap[itr]['group'])>0:
-                static_states.append((itr,s))
-        for i,s in static_states:
-            print (i,s.lexid )
 
         iter_states = [(i,s) for i,s in enumerate(self.init_states)]
         savedir = self.dest+'statesdir/'
@@ -712,7 +697,6 @@ class reinforcement_b(object):
             # Take pass over data.
             if not (self.curriculum == None or self.curriculum=='uniform'):
                 next_states = self.scheduler.get_next_states(epoch)
-                #print (next_states[0][0], self.scheduler.statemap[next_states[0][0]]['lex_id'], end=' - ')
             else:
                 if not self.data_mode == None: 
                     params['present_mode']=self.data_mode
@@ -738,61 +722,45 @@ class reinforcement_b(object):
 
             ''' ------------ Run test ------------ '''
             if epoch>0 and not epoch % params['test_frequency']==0:
-            #if True or epoch>0 and not epoch % params['test_frequency']==0:
-                for i,_ in static_states:
+                for i in range(len(self.init_states)):
                     episode_results.put(epoch, i, None, result_info, use_last_test_episode=True)
             else:
                 num_as, te_goals, actns, ep_losses = \
-                                self._do_batch(static_states, epoch, 'test')
-                for i, (s_id, s0) in enumerate(static_states):
+                                self._do_batch(iter_states, epoch, 'test')
+                for i, s0 in enumerate(self.init_states):
                     result_info = { 's0': s0, \
                                     'num_a': num_as[i], \
                                     'success': te_goals[i], \
                                     'attempted_actions': actns[:,i], \
                                     'loss': ep_losses[-1], \
                                     'mode': 'test' }
-                    episode_results.put(epoch, s_id, None, result_info)
+                    episode_results.put(epoch, i, None, result_info)
 
-#                    if te_goals[i]>0:
-#                        print(static_states[i][0], self.scheduler.statemap[static_states[i][0]]['lex_id'], end='    ')
-
-#                   Returns dict of  {init_state indexed state : -> {'state': state object, 
-#                   'lex_id': str lex id, 'group': group tup}}
-#                    for j, St in enumerate(self.init_states):
-#                        if self.scheduler.statemap[j]['state']==s0 and te_goals[i]>0:
-#                            continue
-#                            print('storing test result, state #%i, result %i, named %s' % \
-#                                    (i, te_goals[i], self.scheduler.statemap[j]['lex_id']),\
-#                                    self.scheduler.statemap[j]['group'])
-#                            if self.scheduler.statemap[j]['lex_id']=='_l': print(actns, '\n', te_goals)
-#                            print(actns, '\n', te_goals, St.lexid, s0.lexid)
-                    #episode_results.put(epoch, i, None, result_info)
-
+            ret_te = ep_losses
             ret_sc = te_goals
 
             if params['disp_avg_losses'] > 0:
-                last_n_test_losses.append(ep_losses)
+                last_n_test_losses.append(ret_te)
                 if len(last_n_test_losses) > params['disp_avg_losses']\
                         * params['test_frequency']:
                     last_n_test_losses.pop(0)
-                last_n_successes.append(np.array(ret_sc, dtype=float))
+                last_n_successes.append(ret_sc)
                 if len(last_n_successes) > params['test_frequency']\
                         * params['test_frequency']:
                     last_n_successes.pop(0)
 
 #            if gethostname()=='PDP' and epoch==1000: 
 #                call(['nvidia-smi'])
+
             if (self.training_epochs > 4000 and epoch%100==0 and epoch>0) \
                  or (self.training_epochs < 4000 and epoch%200==0 and epoch>0) \
                     or (epoch==self.training_epochs-1)\
                     or (epoch<=params['disp_avg_losses'] and epoch%5==0): 
-                n = 1#len(static_states)/self.curriculum.nstates
                 s = "Epoch #"+str(epoch)+"/"+str(self.training_epochs)
                 s += '\tlast '+str(params['disp_avg_losses'])+' losses'+\
                         ' averaged over all states:'
                 s += '  '+str(np.mean(np.array(last_n_test_losses)))
                 s += '  and successes:' 
-                #s += '  %1.4f ' % (n * np.mean(np.array(last_n_successes)))
                 s += '  '+str(np.mean(np.array([np.array(l) for l in last_n_successes]))*\
                         len(last_n_successes[0])/self.curriculum.nstates )
                 print(s) # Batch mode!
@@ -819,7 +787,7 @@ class reinforcement_b(object):
         nstates = len(states)
         num_a = [0]*nstates
         mna_cutoffs = [-1]*nstates
-        wasGoalReached = np.zeros((nstates,))
+        wasGoalReached = [False]*nstates
         if printing: print('\n\n')
         #print([(i,s.name) for i,s in states])
         cur_state_tups = [ [(i,s.copy()) for i,s in states] ]
@@ -830,18 +798,7 @@ class reinforcement_b(object):
             for si,s0 in enumerate(cur_states[-1]):
                 if mna_cutoffs[si]>=0: continue
                 if self.env.isGoalReached(s0): 
-                    wasGoalReached[si]=1
-#                    print('')
-#                    print('>>',mode,self.scheduler._get_nameid(s0,2), attempted_actions[:,si])
-#                    self.env.displayGameState(cur_states[0][si])
-#                    self.env.displayGameState(cur_states[1][si])
-#                    print(epoch,'\n\n')
-#                    for i1, a in enumerate(cur_states):
-#                        for i2, b in enumerate(a):
-#                            print(i1,i2, P_ACTION_NAMES[int(attempted_actions[0,i2])])
-#                            self.env.displayGameState(b)
-#                        print ('')
-#                    sys.exit()
+                    wasGoalReached[si]=True
                 elif nth_action>0 and mode=='train' and \
                         self.scheduler.action_drop(epoch):
                     mna_cutoffs[si] = nth_action # wp, drop actions
@@ -885,9 +842,6 @@ class reinforcement_b(object):
                     tmp = self._stateLogic(s0, Q0_s[si], a, s1_est, a, printing)
                     _,s1_valid,R,_,valid_flag = tmp
                     logic_rets.append( (s1_valid, R, valid_flag) )
-#                    if R>NO_REWARD:
-#                        print("\n!!", a, self.scheduler._get_nameid(s0,2),'->>>',\
-#                                self.scheduler._get_nameid(s1_est,2), eps_chosen[si])
                 else:
                     logic_rets.append( (s0, NO_REWARD, VALID_FLAG_PLACEHOLDER) )
 
