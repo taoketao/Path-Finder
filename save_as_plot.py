@@ -331,7 +331,7 @@ def get_group(st, statemap, l):
     return grp
 
 def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
-        tr2=None, te2=None, curr=None, statemap=None, tf=None):
+        tr2=None, te2=None, curr=None, statemap=None, tf=None, dest=None):
     if states==None:
         raise Exception()
     #f, ax = plt.subplots(lX*2, lY*2, sharex=True)
@@ -403,6 +403,7 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
     if not accessible_states=='all':
         for i,S in incl:
             grp = S['group']
+    #STATES = [pickle.load(open(os.path.join(dest, 'statesdir','state_'+str(i)),'rb')) for i in range(12)]
             if len(grp)==0: # ie, no group
                 continue
             if not grp: raise Exception(str(states[i]))

@@ -2,7 +2,7 @@
 Morgan Bryant, April 2017
 test framework for making sure the NN works - absent any reinforcement context
 '''
-import sys, time
+import sys, time, os, pickle
 import tensorflow as tf
 from socket import gethostname
 import numpy as np
@@ -43,18 +43,26 @@ class session_results(object):
             success: bool of whether the goal was reached,
             mode: "train" or "test"         '''
     def __init__(self, nepochs, batchsize, n_init_states, scheduler):
+    #def __init__(self, nepochs, batchsize, n_init_states, dest, schdlr):
         self.test_loss  = np.zeros( (nepochs, n_init_states) )
         self.test_sccs  = np.zeros( (nepochs, n_init_states) )
         self.train_loss = np.zeros( (nepochs, n_init_states, batchsize) )
         self.train_sccs = np.zeros( (nepochs, n_init_states, batchsize) )
-        self.scheduler = scheduler
-        self.lex_map = { lx['lex_id']:i for i, lx in scheduler.statemap.items() }
+        self.schdlr = schdlr
+        self.lex_to_inits = {}
+    #    self.scheduler = schdlr
+    #    self.lex_map = { lx['lex_id']:i for i, lx in scheduler.statemap.items() }
 
     def put(self, epoch, state_id, batch_index, results_info, use_last_test_episode=False):
-        if results_info['s0'].lexid==None:
-            results_info['s0'].lexid = self.scheduler._get_nameid(results_info['s0'], 2)
-        #if type(results_info)==str and results_info=='last test episode':
-        if use_last_test_episode:
+        state_id = None
+        St = results_info['s0']
+        if St.lexid == None: St.lexid = self.schdlr._get_nameid(St,2)
+        if not St.lexid in self.lex_to_ints.keys():
+            self.lex_to_ints[St.lexid] = len(self.lex_to_ints)
+
+        state_id = self.lex_to_ints[St.lexid]
+
+        if type(results_info)==str and results_info=='last test episode':
             self.test_sccs[epoch, state_id] = self.test_sccs[epoch-1, state_id]
             self.test_loss[epoch, state_id] = self.test_loss[epoch-1, state_id]
             return
@@ -502,8 +510,9 @@ class reinforcement_b(object):
         ...
     '''
     def __init__(self, which_game, frame, game_shape=None, override=None,
-                 load_weights_path=None, data_mode=None, seed=None):
+                 load_weights_path=None, data_mode=None, seed=None, dest=None):
         np.random.seed(seed)
+        self.dest=dest
         if game_shape == None: 
             if 'v3' in which_game: game_shape = (9,9)
             if 'v2' in which_game: game_shape = (7,7)
@@ -660,7 +669,8 @@ class reinforcement_b(object):
         sess.run(init)
         
         episode_results = session_results(self.training_epochs, \
-                self.minibatchsize, len(self.init_states), self.scheduler)
+                            self.minibatchsize, len(self.init_states), \
+                            self.dest, self.scheduler)
 
         Buff=[]
         last_n_test_losses = []
@@ -681,6 +691,12 @@ class reinforcement_b(object):
                 static_states.append((itr,s))
         for i,s in static_states:
             print (i,s.lexid )
+
+        iter_states = [(i,s) for i,s in enumerate(self.init_states)]
+        savedir = self.dest+'statesdir/'
+        if not os.path.exists(savedir): os.makedirs(savedir)
+        for S in iter_states:
+            pickle.dump(S,open(os.path.join(savedir, 'state_'+str(S[0])),'wb'))
 
         for epoch in range(self.training_epochs):
             # Save weights
@@ -750,6 +766,8 @@ class reinforcement_b(object):
 #                                    self.scheduler.statemap[j]['group'])
 #                            if self.scheduler.statemap[j]['lex_id']=='_l': print(actns, '\n', te_goals)
 #                            print(actns, '\n', te_goals, St.lexid, s0.lexid)
+                    #episode_results.put(epoch, i, None, result_info)
+
             ret_sc = te_goals
 
             if params['disp_avg_losses'] > 0:
@@ -764,7 +782,7 @@ class reinforcement_b(object):
 
 #            if gethostname()=='PDP' and epoch==1000: 
 #                call(['nvidia-smi'])
-            if (self.training_epochs > 4000 and epoch%1000==0 and epoch>0) \
+            if (self.training_epochs > 4000 and epoch%100==0 and epoch>0) \
                  or (self.training_epochs < 4000 and epoch%200==0 and epoch>0) \
                     or (epoch==self.training_epochs-1)\
                     or (epoch<=params['disp_avg_losses'] and epoch%5==0): 
@@ -774,7 +792,9 @@ class reinforcement_b(object):
                         ' averaged over all states:'
                 s += '  '+str(np.mean(np.array(last_n_test_losses)))
                 s += '  and successes:' 
-                s += '  %1.4f ' % (n * np.mean(np.array(last_n_successes)))
+                #s += '  %1.4f ' % (n * np.mean(np.array(last_n_successes)))
+                s += '  '+str(np.mean(np.array([np.array(l) for l in last_n_successes]))*\
+                        len(last_n_successes[0])/self.curriculum.nstates )
                 print(s) # Batch mode!
 
                 if not params['printing']: 
@@ -791,7 +811,7 @@ class reinforcement_b(object):
         t = time.time()-init_time
         print("Elapsed time in seconds: %i mins, %.3f seconds" % \
                 (t//60, t % 60))
-        return episode_results, self.init_states
+        return episode_results
 
     def _do_batch(self, states, epoch, mode, buffer_me=False, printing=False):
         #print("EPISODE"); sys.exit()
