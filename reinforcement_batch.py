@@ -42,13 +42,13 @@ class session_results(object):
             actions_attempted: fixed size, Action ids with -1 for untaken actions,
             success: bool of whether the goal was reached,
             mode: "train" or "test"         '''
-    def __init__(self, nepochs, batchsize, n_init_states, scheduler):
+    def __init__(self, nepochs, batchsize, n_init_states, dest, scheduler):
     #def __init__(self, nepochs, batchsize, n_init_states, dest, schdlr):
         self.test_loss  = np.zeros( (nepochs, n_init_states) )
         self.test_sccs  = np.zeros( (nepochs, n_init_states) )
         self.train_loss = np.zeros( (nepochs, n_init_states, batchsize) )
         self.train_sccs = np.zeros( (nepochs, n_init_states, batchsize) )
-        self.schdlr = schdlr
+        self.schdlr = scheduler
         self.lex_to_inits = {}
     #    self.scheduler = schdlr
     #    self.lex_map = { lx['lex_id']:i for i, lx in scheduler.statemap.items() }
@@ -57,10 +57,10 @@ class session_results(object):
         state_id = None
         St = results_info['s0']
         if St.lexid == None: St.lexid = self.schdlr._get_nameid(St,2)
-        if not St.lexid in self.lex_to_ints.keys():
-            self.lex_to_ints[St.lexid] = len(self.lex_to_ints)
+        if not St.lexid in self.lex_to_inits.keys():
+            self.lex_to_inits[St.lexid] = len(self.lex_to_inits)
 
-        state_id = self.lex_to_ints[St.lexid]
+        state_id = self.lex_to_inits[St.lexid]
 
         if type(results_info)==str and results_info=='last test episode':
             self.test_sccs[epoch, state_id] = self.test_sccs[epoch-1, state_id]
