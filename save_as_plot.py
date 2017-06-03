@@ -261,92 +261,36 @@ def _make_str2(states, gridsz, trte, c1, c2):
 def _make_str3(gs, make_states,gridsz, grp_colors, used_clrs):
     ndivs = 4
     state_legend = []
+    grp_ittrs = [0]*40
     gsg = gs.get_geometry()
-    for ittr in range(len(make_states)):
-        ax_tmp = plt.subplot(gs[2*(ittr//ndivs), 8+ittr%ndivs])
+    for i in range(len(make_states)):
+        ax_tmp = plt.subplot(gs[2*(i//ndivs), 8+i%ndivs])
         ax_tmp.get_xaxis().set_visible(False)
         ax_tmp.get_yaxis().set_visible(False)
-        state_legend.append(ax_tmp)
-    ittr=0
-#    X, Y = plt.gcf().get_dpi() * plt.gcf().get_size_inches()
-#    h = int(Y / gsg[0])
-#    w = int(X / gsg[1])
-##    print(X,Y,h,w)
-#    h = int(gsg[0])
-#    w = int(gsg[1])
-#    print(X,Y,h,w)
-    s='\nStates:\n'
-    for which in range(int(ceil(len(make_states)/4.0))):
-        s += '\n'
-        #print(make_states, grp_colors); sys.exit()
-#        s += '  '.join([cnames[s[0][0]-1] for s in \
-#                make_states[which*3:(which+1)*3]])+'\n'
-#        print(h*(ittr//gsg[0]), w*(ittr%gsg[1]), 0.1, 0.1, used_clrs[ittr], grp_colors[used_clrs[ittr][0]][used_clrs[ittr][1]])
+        s_ = ''
+        grp, S = make_states[i]
+        for y in range(gridsz[0]):
+            for x in range(gridsz[1]):
+                if (x==S[0] and y==S[1]):   s_ += 'A'
+                elif (x==S[2] and y==S[3]): s_ += 'G'
+                else: s_ += '-'
+            s_ += '\n'
 
-        s1=s2=s3=''
-        for i in range(gridsz[0]):
-            for j in range(gridsz[1]):
-                S = make_states[which*2][1]
-                if (i==S[1] and j==S[0]):   s += 'A'; s1 += 'A'
-                elif (i==S[3] and j==S[2]): s += 'G'; s1 += 'G'
-                else: s += '-'; s1 += '- '
-            s+='      '
-            if not which*3+1>=len(make_states):
-                for j in range(gridsz[1]):
-                    S = make_states[which*2+1][1]
-                    if (i==S[1] and j==S[0]):   s += 'A'; s2 += 'A'
-                    elif (i==S[3] and j==S[2]): s += 'G'; s2 += 'G'
-                    else: s += '-'; s2 += '- '
-                s+='      '
-                if not which*3+2>=len(make_states):
-                    for j in range(gridsz[1]):
-                        S = make_states[which*2+2][1]
-                        if (i==S[1] and j==S[0]):   s += 'A'; s3 += 'A'
-                        elif (i==S[3] and j==S[2]): s += 'G'; s3 += 'G'
-                        else: s += '-'; s3 += '- '
-                    if not i==gridsz[0]-1:
-                        s += '\n'
-                else: s += '\n' 
-            else: s += '\n' 
-            s1 += '\n'; s2 += '\n'; s3 += '\n'
+        #state_legend[i].text(0, -1.0, s_, \
+        ax_tmp.text(0, -1.0, s_, \
+                horizontalalignment='left',\
+                verticalalignment='center', family='monospace')
+        #state_legend[i].add_patch( patches.Rectangle\
+        ax_tmp.add_patch( patches.Rectangle\
+                ( (0,0), 1, 1, \
+                color=grp_colors[grp[0]-1][grp_ittrs[grp[0]]]))
 
-        grp_ittrs = [0]*40
-        for i in range(len(make_states)):
-            s_ = ''
-            grp, S = make_states[i]
-            print(S)
-            for y in range(gridsz[0]):
-                for x in range(gridsz[1]):
-                    if (x==S[0] and y==S[1]):   s_ += 'A'
-                    elif (x==S[2] and y==S[3]): s_ += 'G'
-                    else: s_ += '-'
-                s_ += '\n'
-
-#            xi_text = w*gsg[1]
-
-            state_legend[i].text(0, -1.0, s_, \
-                    horizontalalignment='left',\
-                    verticalalignment='center', family='monospace')
-#            state_legend[i].text(1, -1.0, s_, \
-#                    horizontalalignment='left',\
-#                    verticalalignment='center', family='monospace')
-#            print('->>', h*(6*ittr//gsg[0]), xi_line, xf_line)
-            print(grp[0], grp_ittrs[grp[0]])
-            state_legend[i].add_patch( patches.Rectangle\
-                    ( (0,0), 1, 1, \
-                    #color=grp_colors[grp_ittrs[grp[0]]][grp[0]]))
-                    color=grp_colors[grp[0]][grp_ittrs[grp[0]]]))
-#                                    [grp][1]))
-#                    color=grp_colors[used_clrs[grp][0]]\
-#                                    [used_clrs[grp][1]]))
-#            state_legend[ittr].hlines(h*(10*ittr//gsg[0]),\
-#                    xi_line, xf_line, \
-#                    linewidth = 0.5)
-            ittr += 1
-            grp_ittrs[grp[0]] += 1
-
-        s += '\n'
-    return s
+        grp_ittrs[grp[0]] += 1
+    ax_tmp = plt.subplot(gs[2*(len(make_states)//ndivs), 8+len(make_states)%ndivs])
+    ax_tmp.set_axis_off()
+#    ax_tmp.get_xaxis().set_visible(False)
+#    ax_tmp.get_yaxis().set_visible(False)
+    return ''
 
 
 
@@ -387,7 +331,7 @@ def get_group(st, statemap, l):
     return grp
 
 def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
-        tr2=None, te2=None, curr=None, statemap=None, tf=None):
+        tr2=None, te2=None, curr=None, statemap=None, tf=None, dest=None):
     if states==None:
         raise Exception()
     #f, ax = plt.subplots(lX*2, lY*2, sharex=True)
@@ -399,11 +343,15 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
         raise Exception("Please tell me if this is egocentric, allocentric, etc")
 
     Tr = smooth(tr, smoothing)
-    if tf: Te = smooth(te, smoothing//(tf//2))
+    if tf: Te = smooth(te, max(4, smoothing//tf))
     else:  Te = smooth(te, smoothing)
     if twoplots: 
         Tr2 = smooth(tr2, smoothing)
-        if tf: Te2 = smooth(te, smoothing//(tf//2))
+        if tf: 
+            try: 
+                Te2 = smooth(te, smoothing//(tf//2))
+            except: 
+                Te2 = smooth(te, smoothing)
         else:  Te2 = smooth(te, smoothing)
 
     #f,ax = plt.subplots(2,2, sharex=True, sharey=True)
@@ -436,64 +384,89 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
 #        grp1_colors_te = ['#ff1a1a','#ffcccc','#990000','#ff8080','#e60000','#cc0000'] # reds
 #        grp2_colors_te = ['#000080','#6666ff','#9999ff','#3333ff','#ccccff','#0000cc'] # blues
 #        grp3_colors_te = ['#ffde7a','#ffd145','#ffc000','#dba602','#c19204','#987301'] # oranges
-        grp_colors = [[‘#3333ff','#000080','#9999ff','#ccccff','#0000cc','#6666ff'], # blues
-                 ['#00cccc','#008080','#80ffff','#ccffff','#009999','#00ffff'], # cyans
-                 ['#7fb77b','#496b47','#afffa9','#cfffcc','#5e895b','#9ae095'], # lightgreens
-                 ['#e60000','#990000','#ff8080','#ffcccc','#cc0000','#ff1a1a'], # reds
-                 ['#ff66a3','#e6005c','#ffcce0','#ffe6f0','#ff1a75','#ff99c2'], # pinks
-                 ['#dba602','#987301','#ffd145','#ffde7a','#c19204','#ffc000']] # oranges
+        grp_colors =[['#3333ff','#000080','#9999ff','#ccccff','#0000cc','#6666ff'], # blues
+                     ['#e60000','#990000','#ff8080','#ffcccc','#cc0000','#ff1a1a'], # reds
+                     ['#dba602','#987301','#ffd145','#ffde7a','#c19204','#ffc000'], # oranges
+                     ['#7fb77b','#496b47','#afffa9','#cfffcc','#5e895b','#9ae095'], # lightgreens
+                     ['#00cccc','#008080','#80ffff','#ccffff','#009999','#00ffff'], # cyans
+                     ['#ff66a3','#e6005c','#ffcce0','#ffe6f0','#ff1a75','#ff99c2']] # pinks
         g1,g2,g3 = 0,0,0
     else: accessible_states='all'
 
     used_clrs = []
-    print(len(states), Tr.shape[1])
-#    print(len(states))
-#    for i in range(len(accessible_states) if not accessible_states=='all' else Tr.shape[1]):
-    Used_CLRS = []
-    for i in range(len(states)):
-        if not accessible_states=='all':
-            grp = get_group(states[i], statemap, Tr.shape[1])
-            print(grp)
+#    incl = np.zeros(Tr.shape, dtype=bool)
+    incl = []
+    for ind, S in statemap.items():
+        if len(S['group'])>0:
+            print(ind, S['group'], S['lex_id'])
+            incl.append((ind, S))
+    if not accessible_states=='all':
+        for i,S in incl:
+            grp = S['group']
+    #STATES = [pickle.load(open(os.path.join(dest, 'statesdir','state_'+str(i)),'rb')) for i in range(12)]
             if len(grp)==0: # ie, no group
                 continue
             if not grp: raise Exception(str(states[i]))
             if grp[0]==1: 
-                lc = grp_colors[0][g1]
-                dc = grp_colors[1][g1]
+                clr = grp_colors[0][g1]
                 used_clrs.append( (1, g1) )
                 g1+=1
             if grp[0]==2: 
-                lc = grp_colors[2][g2]
-                dc = grp_colors[3][g2]
+                clr = grp_colors[1][g2]
                 used_clrs.append( (2, g2) )
                 g2+=1
             if grp[0]==3: 
-                lc = grp_colors[4][g3]
-                dc = grp_colors[5][g3]
+                clr = grp_colors[2][g3]
                 used_clrs.append( (3, g3) )
                 g3+=1
-            ax[(0,0)].plot(Tr[:,i], c=lc)
-            ax[(0,1)].plot(Te[:,i], c=lc)
+            ax[(0,0)].plot(Tr[:,i]+i*5e-4*(-1)**i, c=clr)
+            ax[(0,1)].plot(Te[:,i]+i*5e-4*(-1)**i, c=clr)
             if twoplots:
-                ax[(0,0)].plot(Tr2[:,i], c=dc)
-                ax[(0,1)].plot(Te2[:,i], c=dc)
-        else:
+                ax[(0,0)].plot(Tr2[:,i]+i*5e-4*(-1)**i, c=clr)
+                ax[(0,1)].plot(Te2[:,i]+i*5e-4*(-1)**i, c=clr)
+    else:
+        for i in range(len(states)):
             ax[(0,0)].plot(Tr[:,i], c=colors[i])
             ax[(0,1)].plot(Te[:,i], c=colors[i])
             if twoplots:
                 ax[(0,0)].plot(Tr2[:,i], c=darkcolors[i])
                 ax[(0,1)].plot(Te2[:,i], c=darkcolors[i])
-    ax[(1,0)].plot(np.mean(Tr, axis=1), c='orange')
-    ax[(1,1)].plot(np.mean(Te, axis=1), c='orange')
+#    print(incl,states, [states[i[0]] for i in incl]) 
+    inds = [i[0] for i in incl]
+    if not accessible_states=='all':
+        ax[(1,0)].plot(np.mean(Tr[:,inds], axis=1)+np.random.random(\
+                (Tr.shape[0],))*0.03, c='orange')
+        ax[(1,1)].plot(np.mean(Te[:,inds], axis=1)+np.random.random(\
+                (Te.shape[0],))*0.03, c='orange')
+        if twoplots:
+            ax[(1,0)].plot(np.mean(Tr2[:,inds], axis=1)+np.random.random(\
+                    (Tr2.shape[0],))*0.03, c='black')
+            ax[(1,1)].plot(np.mean(Te2[:,inds], axis=1)+np.random.random(\
+                    (Te2.shape[0],))*0.03, c='black')
+    else:
+        ax[(1,0)].plot(np.mean(Tr, axis=1), c='orange')
+        ax[(1,1)].plot(np.mean(Te, axis=1), c='orange')
+        if twoplots:
+            ax[(1,0)].plot(np.mean(Tr2, axis=1), c='black')
+            ax[(1,1)].plot(np.mean(Te2, axis=1), c='black')
+
     if curr and curr.which_ids=='r, u, ru-diag only':
         ax[(1,0)].plot([2*(3**-1)]*Tr.shape[0], c='green')
         ax[(1,1)].plot([2*(3**-1)]*Tr.shape[0], c='green')
+    elif curr and curr.which_ids=='all diag':
+        ax[(1,0)].plot([0.5]*Tr.shape[0], c='green')
+        ax[(1,1)].plot([0.5]*Tr.shape[0], c='green')
+    elif curr and curr.which_ids=='r or u only':
+        ax[(1,0)].plot([0.4]*Tr.shape[0], c='green')
+        ax[(1,1)].plot([0.4]*Tr.shape[0], c='green')
+        ax[(1,0)].plot([0.8]*Tr.shape[0], c='green')
+        ax[(1,1)].plot([0.8]*Tr.shape[0], c='green')
+    elif curr and curr.which_ids=='any1step, u r diag':
+        ax[(1,0)].plot([0.8]*Tr.shape[0], c='green')
+        ax[(1,1)].plot([0.8]*Tr.shape[0], c='green')
     else:
         ax[(1,0)].plot([3**-1]*Tr.shape[0], c='green')
         ax[(1,1)].plot([3**-1]*Tr.shape[0], c='green')
-    if twoplots:
-        ax[(1,0)].plot(np.mean(Tr2, axis=1), c='black')
-        ax[(1,1)].plot(np.mean(Te2, axis=1), c='black')
     ax[(0,0)].set_ylabel("accuracy per epoch by start state")
     ax[(1,0)].set_ylabel("accuracy per epoch")
     ax[(1,0)].set_xlabel("Training")
@@ -512,7 +485,7 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
             c = { 1: 'pinks/reds', 2: 'cyans/blues', 3: 'lightgreens/oranges' }[grp[0]]
             make_states.append((grp,st))
         #cnames =['pink/red   ','cyan/blue  ','lightgreens/oranges'] 
-        s2 += '\n    '+c+':\n'+ _make_str3(gs, make_states,(7,7),grp_colors,used_clrs)
+        s2 += '\n'+ _make_str3(gs, make_states,(7,7),grp_colors,used_clrs)
     elif not states==None and Tr.shape[1]>4:
         s2 += _make_str2(states,(7,7), -1, colors, darkcolors)
 
@@ -523,8 +496,8 @@ def save_as_successes(s, tr, te, states=None, smoothing=10, centric=None,\
             s2 += '\nDark / black: '+centric[1]
             fs = 14
         elif not accessible_states=='all':
-            s2 += '\nfoo: '+centric[0]
-            s2 += '\nbar: '+centric[1]
+            s2 += '\norange: '+centric[0]
+            s2 += '\nblack: '+centric[1]
             fs = 10
         elif Tr.shape[1]>4:
             s2 += '\nblues: '+centric[0]
