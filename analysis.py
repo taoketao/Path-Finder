@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from matplotlib import gridspec
 from subprocess import call
 from time import asctime
+from scipy.stats import binom_test
 
 def init_process(x): 
     if "output.txt" in x:
@@ -45,7 +46,7 @@ def init_process(x):
             f.readline()
     return EGOS, ALLOS
 
-def run_stat_compare(targs):
+def run_stat_compare(targs, show=False):
     ''' This analysis tests 1) [amount of] success and 2) time to success
         for successful trials, across trials.  Facilitates multiple 
         experiments.'''
@@ -58,7 +59,9 @@ def run_stat_compare(targs):
         allo_mats.append(tup[1])
     Shape = ego_mats[0].shape # Shape: (trials) x (time-series datapoints)
     n_compare = len(ego_mats)
-    print(n_compare, Shape)
+    if show: print(n_compare, Shape)
+    if not n_compare==3: raise Exception("Not implemented yet")
+    ''' Assumption: this data comes in curr order GRADUAL, NO, STEPWISE'''
 
     etimes = np.zeros   ( (n_compare, Shape[0] ), dtype=int) # bucketed
     atimes = np.zeros   ( (n_compare, Shape[0] ), dtype=int ) # bucketed 
@@ -91,22 +94,44 @@ def run_stat_compare(targs):
                 a_categ[m,etimes[m,smp]] += 1
             e_categ[m,etimes[m,smp]] += 1
             a_categ[m,atimes[m,smp]] += 1
-#        e_categ[m,:] /= np.sum(e_categ[m,:])
-#        a_categ[m,:] /= np.sum(a_categ[m,:])
-#        print(etimes[m,:])
-#        print(e_categ[m,:])
-#        print(atimes[m,:])
-#        print(a_categ[m,:])
-#        print('')
+        if show:
+            print(etimes[m,:])
+            print(e_categ[m,:])
+            print(atimes[m,:])
+            print(a_categ[m,:])
+            print('')
+    if show: 
+        print(esuccess, asuccess)
+        print(np.mean(esuccess), np.mean(asuccess), np.mean(esuccess, \
+                axis=1), np.mean(asuccess, axis=1))
+
+    raw_success = [[ ['all ego',    np.sum(esuccess)], \
+                     ['all allo',   np.sum(asuccess)], ],\
+                   [ ['gradu ego',  np.sum(esuccess, axis=1)[0]],\
+                     ['gradu allo', np.sum(asuccess, axis=1)[0]], ],\
+                   [ ['nocur ego',  np.sum(esuccess, axis=1)[1]],\
+                     ['nocur allo', np.sum(asuccess, axis=1)[1]], ],\
+                   [ ['stepw ego',  np.sum(esuccess, axis=1)[2]],\
+                     ['stepw allo', np.sum(asuccess, axis=1)[2]] ]]
+    pct_success = [[ ['all ego',    np.mean(esuccess)], \
+                     ['all allo',   np.mean(asuccess)], ],\
+                   [ ['gradu ego',  np.mean(esuccess, axis=1)[0]],\
+                     ['gradu allo', np.mean(asuccess, axis=1)[0]], ],\
+                   [ ['nocur ego',  np.mean(esuccess, axis=1)[1]],\
+                     ['nocur allo', np.mean(asuccess, axis=1)[1]], ],\
+                   [ ['stepw ego',  np.mean(esuccess, axis=1)[2]],\
+                     ['stepw allo', np.mean(asuccess, axis=1)[2]] ]]
     RR = np.array(range(len(R)+1))
-    if not n_compare==3: raise Exception("Not implemented yet")
 
     width = 0.4
-#    fig, ax = plt.subplots(2,2, sharex=True, sharey=True)
-    fig, ax = plt.subplots(4,4)
-    fig.set_size_inches(10,10)
+
     # Good for 2x2: plt.subplots_adjust(top=0.85, left=0.15, bottom=0.15, wspace=0.2, hspace=0.45)
-    plt.subplots_adjust(top=0.9, left=0.1, bottom=0.1, wspace=0.5, hspace=0.5)
+#    fig, ax = plt.subplots(4,4)
+#    plt.subplots_adjust(top=0.9, left=0.1, bottom=0.1, wspace=0.5, hspace=0.5)
+    fig, ax = plt.subplots(4,2)
+    plt.subplots_adjust(top=0.9, left=0.1, right=1.1, bottom=0.1, wspace=0.5, hspace=0.5)
+
+    fig.set_size_inches(10,10)
 
     inds = [13,0,1,2,3,4,5,6,7,8,9,10,11,12]
 
@@ -149,38 +174,40 @@ def run_stat_compare(targs):
             +" curriculum's time to success.\n RBG: allocentric, "\
             +"CYM: egocentric.  Did Not Learn indicated as DNL.", fontsize=10)
 
+    for r in  raw_success: print(r)
     for i in range(4):
-#            labels = [item.get_text() for item in ax[i,j].get_xticklabels()]
-#            print labels
-#            labels = ['']*14
-#            for i in range(13):
-#                labels[i] = str(R[i])
-#            labels[13] = 'None'
-#            ax[i,j].set_xticklabels(range(14),labels)
-#            ax[i,j].set_xticks(range(14), xticklabels, minor=True)
-#            xticklabels = ['DNL']+[str(s) for s in R[3:]]
             xticklabels = ['','DNL']+[str(s) for s in R]
-#            plt.xticks(xticklabels)
             xtickNames = plt.setp(ax[i,0], xticklabels=xticklabels )
-#            ax[i,j].locator_params(nbins=11, axis='x')
-#            ax[i,j].set_xlim(2, 14)
             ax[i,0].locator_params(nbins=15, axis='x')
             ax[i,0].set_xlim(-1, 14)
             plt.setp(xtickNames, rotation=85, fontsize=6)
             ax[i,0].set_ylim(-1, 20)
             ax[i,0].plot([-width,13+width],[0,0], c='black', linewidth=0.5)
-            for j in [1,2,3]:
+
+            p= binom_test( (raw_success[i][0][1], raw_success[i][1][1]), alternative='greater')
+            ax[i,1].text(-0.35,0, 'Under a binomial test, the significance\nof '\
+                    +'the hypothesis that a successful trial\ncame from an '\
+                    +'Egocentric run than\nan Allocentric run: p=%1.3e' % p,\
+                    fontsize=12)
+            
+
+            for j in [1]:#,2,3]:
+                ax[i,j].set_ylim(0,1)
+                ax[i,j].set_xlim(0,1)
+                ax[i,j].set_axis_off()
                 plt.setp(ax[i,j].get_xticklabels(), visible=False)
-#    ax[1,1].set_xlabel('First epoch with 100% success', fontsize=8)
+                plt.setp(ax[i,j].get_yticklabels(), visible=False)
     ax[3,0].set_xlabel('First epoch with 100% success', fontsize=8)
     ax[0,0].set_ylabel('Count, out of 20 trials', fontsize=8)
     ax[1,0].set_ylabel('Count, out of 20 trials', fontsize=8)
     ax[2,0].set_ylabel('Count, out of 20 trials', fontsize=8)
     ax[3,0].set_ylabel('Count, out of 20 trials', fontsize=8)
-    #plt.show()
     t = './Experiments/statplot-'+asctime().replace(' ','_').replace(':','')
-    plt.savefig(t+'.png', dpi=100)
-    call(['open', t+'.png'])
+    if show:
+        plt.show()
+    else:
+        plt.savefig(t+'.png', dpi=100)
+        call(['open', t+'.png'])
 
     print('done')
 
@@ -233,4 +260,6 @@ if __name__=='__main__':
             run_6_02_analysis(sys.argv[2]);
         elif sys.argv[1]=='stat-compare':
             run_stat_compare(sys.argv[2:])
+        elif sys.argv[1]=='stat-compare-show':
+            run_stat_compare(sys.argv[2:], show=True)
         else: print("argument not recognized.")
