@@ -1,4 +1,4 @@
-import sys, os
+import sys, os, pwd, grp
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
@@ -6,43 +6,59 @@ from subprocess import call
 from time import asctime
 from scipy.stats import binom_test
 
-def init_process(x): 
+def init_process(x, num_epochs): 
+    if num_epochs==2000: R = 13
+    if num_epochs==7500: R = 78
     if "output.txt" in x:
         y = x[:-10]+'log.txt'
-        print(x, y)
         INP = open(x, 'r')
         OUT = open(y, 'w')
-        def onetrial():
-            for _ in range(18): INP.readline()
-            for i in range(13):
-                OUT.write( INP.readline().split(':  ')[-1] )
+        try: os.chown(x,501,20)
+        except: pass#os.chown(x,501,20)
+        def onetrial(skip=True):
+            if skip:
+                for _ in range(18): 
+                    x=INP.readline();
+            for i in range(R):
+                l = INP.readline()
+                if l=='Done.': break
+                OUT.write( l.split(':  ')[-1] )
             OUT.write('\n')
         INP.readline()
         OUT.write("Ego\n")
         for J in range(20): onetrial()
-        for _ in range(21): INP.readline()
         OUT.write("Allo\n")
-        for J in range(20): onetrial()
+        INP.readline()
+        if not len(INP.readline())==1:
+            for _ in range(19): INP.readline()
+            for J in range(20): onetrial()
+        else:
+            for _ in range(16): INP.readline()
+            onetrial(False)
+            for J in range(19): onetrial()
         INP.close(); 
         OUT.close()
         targ= y
-
+    
     elif not "log.txt" in x:
         raise Exception(x)
     else: targ=x
-
     with open(targ, 'r') as f:
         while not 'Ego' in f.readline(): pass
-        EGOS = np.zeros((20,13))
-        ALLOS = np.zeros((20,13))
+        EGOS = np.zeros((20,R))
+        ALLOS = np.zeros((20,R))
         for e in range(20):
-            for j in range(13):
+            for j in range(R):
                 EGOS[e,j] = float(f.readline())
             f.readline()
         while not 'Allo' in f.readline(): pass
         for e in range(20):
-            for j in range(13):
-                ALLOS[e,j] = float(f.readline())
+            for j in range(R):
+                l = f.readline()
+                try:
+                    ALLOS[e,j] = float(l)
+                except:
+                    raise Exception(e,j,l,targ)
             f.readline()
     return EGOS, ALLOS
 
@@ -53,8 +69,18 @@ def run_stat_compare(targs, show=False):
     R = [0,5,10,200,400,600,800,1000,1200,1400,1600,1800,1999]
     R_ = [0,5,10,200,400,600,800,1000,1200,1400,1600,1800,1999,-1]
     ego_mats, allo_mats = [],[]
-    for targ in targs:
-        tup = init_process(targ)
+
+#    targs = ['./storage/6-01/ego-allo-4/output.txt', 
+#                './storage/6-01/ego-allo-5/output.txt', 
+#                './storage/6-01/ego-allo-6/output.txt', 
+#                './storage/6-03/ego-allo-3/output.txt']
+
+    for i, targ in enumerate(targs):
+        print i, targ
+        if i<=2:
+            tup = init_process(targ, 2000)
+        else:
+            tup = init_process(targ, 7500)
         ego_mats.append(tup[0]); 
         allo_mats.append(tup[1])
     Shape = ego_mats[0].shape # Shape: (trials) x (time-series datapoints)
@@ -126,10 +152,10 @@ def run_stat_compare(targs, show=False):
     width = 0.4
 
     # Good for 2x2: plt.subplots_adjust(top=0.85, left=0.15, bottom=0.15, wspace=0.2, hspace=0.45)
-#    fig, ax = plt.subplots(4,4)
-#    plt.subplots_adjust(top=0.9, left=0.1, bottom=0.1, wspace=0.5, hspace=0.5)
-    fig, ax = plt.subplots(4,2)
-    plt.subplots_adjust(top=0.9, left=0.1, right=1.1, bottom=0.1, wspace=0.5, hspace=0.5)
+    fig, ax = plt.subplots(4,4)
+    plt.subplots_adjust(top=0.9, left=0.1, bottom=0.1, wspace=0.5, hspace=0.6)
+ #   fig, ax = plt.subplots(4,2)
+  #  plt.subplots_adjust(top=0.9, left=0.1, right=1.1, bottom=0.1, wspace=0.5, hspace=0.5)
 
     fig.set_size_inches(10,10)
 
@@ -188,7 +214,11 @@ def run_stat_compare(targs, show=False):
             ax[i,1].text(-0.35,0, 'Under a binomial test, the significance\nof '\
                     +'the hypothesis that a successful trial\ncame from an '\
                     +'Egocentric run than\nan Allocentric run: p=%1.3e' % p,\
-                    fontsize=12)
+                    fontsize=8)
+#            ax[i,1].text(-0.35,0, 'Under a binomial test, the significance\nof '\
+#                    +'the hypothesis that a successful trial\ncame from an '\
+#                    +'Egocentric run than\nan Allocentric run: p=%1.3e' % p,\
+#                    fontsize=12)
             
 
             for j in [1]:#,2,3]:
