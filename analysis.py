@@ -1,7 +1,7 @@
 import sys, os, pwd, grp
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib import gridspec
+from matplotlib import gridspec, rc
 from subprocess import call
 from time import asctime
 from scipy.stats import binom_test
@@ -63,11 +63,12 @@ def init_process(x, num_epochs):
     return EGOS, ALLOS
 
 def run_stat_compare(targs, show=False):
+#    rc('text', usetex=True)
     ''' This analysis tests 1) [amount of] success and 2) time to success
         for successful trials, across trials.  Facilitates multiple 
         experiments.'''
     R = [0,5,10,200,400,600,800,1000,1200,1400,1600,1800,1999]
-    R_ = [0,5,10,200,400,600,800,1000,1200,1400,1600,1800,1999,-1]
+    R2 = [0,5,10]+[100*(i+1) for i in range(75)]
     ego_mats, allo_mats = [],[]
 
 #    targs = ['./storage/6-01/ego-allo-4/output.txt', 
@@ -86,7 +87,7 @@ def run_stat_compare(targs, show=False):
     Shape = ego_mats[0].shape # Shape: (trials) x (time-series datapoints)
     n_compare = len(ego_mats)
     if show: print(n_compare, Shape)
-    if not n_compare==3: raise Exception("Not implemented yet")
+    if not (n_compare==3 or n_compare==4): raise Exception("Not implemented yet")
     ''' Assumption: this data comes in curr order GRADUAL, NO, STEPWISE'''
 
     etimes = np.zeros   ( (n_compare, Shape[0] ), dtype=int) # bucketed
@@ -188,10 +189,10 @@ def run_stat_compare(targs, show=False):
     ax[3,0].bar(RR+width/2, e_categ[2,inds], width, color=lred)
     ax[3,0].bar(RR-width/2, a_categ[2,inds], width, color=red)
 
-    ax[0,0].set_title('all', fontsize=9)
-    ax[1,0].set_title('gradual curriculum', fontsize=9)
-    ax[2,0].set_title('no curriculum', fontsize=9)
-    ax[3,0].set_title('stepwise curriculum', fontsize=9)
+    ax[0,0].set_title('All', fontsize=9)
+    ax[1,0].set_title('Gradual curriculum', fontsize=9)
+    ax[2,0].set_title('No curriculum', fontsize=9)
+    ax[3,0].set_title('Stepwise curriculum', fontsize=9)
 
     fig.suptitle('Comparison of ego/allocentrism: histogram each'\
             +" curriculum's time to success.\nDark: allocentric, "\
@@ -202,37 +203,91 @@ def run_stat_compare(targs, show=False):
 
     for r in  raw_success: print(r)
     for i in range(4):
-            xticklabels = ['','DNL']+[str(s) for s in R]
-            xtickNames = plt.setp(ax[i,0], xticklabels=xticklabels )
-            ax[i,0].locator_params(nbins=15, axis='x')
-            ax[i,0].set_xlim(-1, 14)
-            plt.setp(xtickNames, rotation=85, fontsize=6)
-            ax[i,0].set_ylim(-1, 20)
-            ax[i,0].plot([-width,13+width],[0,0], c='black', linewidth=0.5)
+        xticklabels = ['','DNL']+[str(s) for s in R]
+        xtickNames = plt.setp(ax[i,0], xticklabels=xticklabels )
+        ax[i,0].locator_params(nbins=15, axis='x')
+        ax[i,0].set_xlim(-1, 14)
+        plt.setp(xtickNames, rotation=85, fontsize=6)
+        ax[i,0].set_ylim(-1, 20)
+        ax[i,0].plot([-width,13+width],[0,0], c='black', linewidth=0.5)
 
-            p= binom_test( (raw_success[i][0][1], raw_success[i][1][1]), alternative='greater')
-            ax[i,1].text(-0.35,0, 'Under a binomial test, the significance\nof '\
-                    +'the hypothesis that a successful trial\ncame from an '\
-                    +'Egocentric run than\nan Allocentric run: p=%1.3e' % p,\
+        p= binom_test( (raw_success[i][0][1], raw_success[i][1][1]), alternative='greater')
+        s = {0: 'Overall:\n\n', 1: 'Gradual curriculum:\n\n', 2:'No curriculum:\n\n',\
+                3:'Stepwise curriculum:\n\n'}[i]
+        if n_compare==4:
+            ax[i,1].text(-0.35,0, s+'Under a binomial test, the\nsignificance of '\
+                    +'the hypothesis that a\nsuccessful trial came from an\n'\
+                    +'Egocentric run a than an\nAllocentric run: $\\bf{p=%1.3e}$' % p,\
                     fontsize=8)
-#            ax[i,1].text(-0.35,0, 'Under a binomial test, the significance\nof '\
-#                    +'the hypothesis that a successful trial\ncame from an '\
-#                    +'Egocentric run than\nan Allocentric run: p=%1.3e' % p,\
-#                    fontsize=12)
-            
+        else:
+            ax[i,1].text(-0.35,0, s+'Under a binomial test, the significance\nof '\
+                    +'the hypothesis that a successful trial\ncame from an '\
+                    +'Egocentric run than\nan Allocentric run: $\\bf{p=%1.3e}$' % p,\
+                    fontsize=12)
+        
 
-            for j in [1]:#,2,3]:
-                ax[i,j].set_ylim(0,1)
-                ax[i,j].set_xlim(0,1)
-                ax[i,j].set_axis_off()
-                plt.setp(ax[i,j].get_xticklabels(), visible=False)
-                plt.setp(ax[i,j].get_yticklabels(), visible=False)
+        for j in [1]:#,2,3]:
+            ax[i,j].set_ylim(0,1)
+            ax[i,j].set_xlim(0,1)
+            ax[i,j].set_axis_off()
+            plt.setp(ax[i,j].get_xticklabels(), visible=False)
+            plt.setp(ax[i,j].get_yticklabels(), visible=False)
     ax[3,0].set_xlabel('First epoch with 100% success', fontsize=8)
-    ax[0,0].set_ylabel('Count, out of 20 trials', fontsize=8)
-    ax[1,0].set_ylabel('Count, out of 20 trials', fontsize=8)
-    ax[2,0].set_ylabel('Count, out of 20 trials', fontsize=8)
-    ax[3,0].set_ylabel('Count, out of 20 trials', fontsize=8)
+    ax[0,0].set_ylabel('Count out of 20 trials', fontsize=8)
+    ax[1,0].set_ylabel('Count out of 20 trials', fontsize=8)
+    ax[2,0].set_ylabel('Count out of 20 trials', fontsize=8)
+    ax[3,0].set_ylabel('Count out of 20 trials', fontsize=8)
     t = './Experiments/statplot-'+asctime().replace(' ','_').replace(':','')
+
+    if n_compare==4:
+        gs = gridspec.GridSpec(4,4)
+        ax2 = plt.subplot(gs[0,2:])
+        etimes = np.zeros   ( (Shape[0] ), dtype=int) # bucketed
+        atimes = np.zeros   ( (Shape[0] ), dtype=int ) # bucketed 
+
+        e_categ = np.ones( (len(R2)+1) )*-0.5
+        a_categ = np.ones( (len(R2)+1) )*-0.5
+        esuccess = np.floor(ego_mats[-1][:,-1])
+        asuccess = np.floor(allo_mats[-1][:,-1])
+        esccsamt = ego_mats[-1][:,-1]
+        asccsamt = allo_mats[-1][:,-1]
+
+        for smp in range(Shape[0]):
+            etimes[smp] = -1
+            atimes[smp] = -1
+            Ve = 1; Va = 1
+            for N in reversed(range(len(R2))):
+                Ve = min(ego_mats[-1][smp,N],Ve)
+                if not Ve<1: 
+                    etimes[smp] = N;#R[N]
+                Va = min(allo_mats[-1][smp,N],Va)
+                if not Va<1: 
+                    atimes[smp] = N;#R[N]
+            if e_categ[etimes[smp]] == -1:
+                e_categ[etimes[smp]] += 1
+            if a_categ[etimes[smp]] == -1:
+                a_categ[etimes[smp]] += 1
+            e_categ[etimes[smp]] += 1
+            a_categ[atimes[smp]] += 1
+        inds = [78]+list(range(78))
+        RR = np.array(range(len(R2)+1))
+        ax2.bar(RR+width/2, e_categ[inds], width, color='lime')#'0.35')
+        ax2.bar(RR-width/2, a_categ[inds], width, color='darkmagenta')#'0.65')
+        ax2.set_title('Linear curriculum. Lime: egocentric, Purple: allocentric', fontsize=9)
+
+        xticklabels = ['DNL','DNL']+[str(s) for s in R2[::2]]
+        xtickNames = plt.setp(ax2, xticklabels=xticklabels )
+        ax2.locator_params(nbins=80, axis='x')
+        ax2.set_xlim(-1, 80)
+        plt.setp(xtickNames, rotation=85, fontsize=6)
+        ax2.set_ylim(bottom=-1)
+        ax2.plot([-width,78+width],[0,0], c='black', linewidth=0.5)
+
+
+
+
+
+
     if show:
         plt.show()
     else:
