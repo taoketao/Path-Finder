@@ -283,6 +283,7 @@ def run_stat_compare(targs, show=False):
         ax2.set_ylim(bottom=-1)
         ax2.plot([-width,78+width],[0,0], c='black', linewidth=0.5)
 
+    # Get successful trials; among these, do t-test for value of success.
 
 
 
