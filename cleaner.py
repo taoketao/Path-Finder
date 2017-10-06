@@ -61,34 +61,36 @@ TEMPLATE_TSE = ''' x x x x x x x x x x x  r
     !  agent and goal       I  agent        -  immobile
     @  goal and mobile      *  goal         o  mobile
     <space>  empty          #  ERROR                        '''
-def print_state(start_state, mode):
+def print_state(start_state, mode, print_or_ret='print'):
+    S = ''
     if type(start_state)==np.ndarray:
         st = start_state
     else:
         st = start_state['state']
-        print mode+':'
+        S += str(mode+':')
     if mode=='matrices':
         for i in range(st.shape[-1]):
-            print st[:,:,i]
+            S += str(st[:,:,i])
     if mode=='condensed':
         for y in range(st.shape[Y]):
             for x in range(st.shape[X]):
-                if st[x,y,goalLayer] and st[x,y,agentLayer]: print '!',
-                elif st[x,y,agentLayer]: print 'I',
-                elif st[x,y,goalLayer] and st[x,y,mobileLayer]: print '@',
-                elif st[x,y,goalLayer]: print '*',
-                elif st[x,y,immobileLayer]: print '-',
-                elif st[x,y,mobileLayer]: print 'o',
-                elif 0==np.sum(st[x,y,:]): print ' ',
+                if st[x,y,goalLayer] and st[x,y,agentLayer]: S += str('!')
+                elif st[x,y,agentLayer]: S += str('I')
+                elif st[x,y,goalLayer] and st[x,y,mobileLayer]: S += str('@')
+                elif st[x,y,goalLayer]: S += str('*')
+                elif st[x,y,immobileLayer]: S += str('-')
+                elif st[x,y,mobileLayer]: S += str('o')
+                elif 0==np.sum(st[x,y,:]): S += str(' ')
                 else: 
-                    print '#'
+                    S += str('#')
+                    print S
                     raise Exception("Error")
-            print ''
+            S += str('\n')
     if not type(start_state)==np.ndarray:
-        print "Flavor signal: ", start_state['flavor signal']
+        S += str("Flavor signal: ", start_state['flavor signal'])
 
-
-
+    if print_or_ret=='print': print S
+    else: return S
 
 # General utilities:
 def map_nparr_to_tup(Iterable):
@@ -113,22 +115,37 @@ def put(mat, pos, lyr, v): mat[pos[X], pos[Y], lyr] = v
 def put_all(mat, pos_list, lyr, v):
     for p in pos_list: put(mat, p, lyr, v)
 
-
+#------#------#------#------#------#------#------#------#------#------#------#--
+#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*
+#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*
+#
+#   Experiment API class:
+#
+#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*$#*
+#------#------#------#------#------#------#------#------#------#------#------#--
 
 
 # Experiment class:
 class ExpAPI(environment_handler3):
     def __init__(self, experiment_name, centr, debug=False):
+        ''' Initializer for Experiment class. Please provide:
+         - experiment_name keyword, which indirectly signals the starting 
+            states. Currently takes 'tse2007'.
+         - centr, the keyword for the reference frame. Currently takes 
+            'allocentric' or 'egocentric' but in future will facilitate 
+            rotational heading frames.
+         - optional debug-mode boolean flag
+        '''
         environment_handler3.__init__(self, \
                 gridsize    = { 'tse2007': (11,11) }[experiment_name], \
                 action_mode = centr )
         self.state_gen = state_generator(self.gridsz)
         self.start_states = []
-        self.set_starting_states(\
+        self._set_starting_states(\
                 {'tse2007':TEMPLATE_TSE}[experiment_name], debug)
 
-    #  scan from a template string (eg, TEMPLATE_TSE)
-    def find_all(self, a_str, char):
+    def _find_all(self, a_str, char):
+    # [internal] scan from a template string (eg, TEMPLATE_TSE)
         s = a_str.replace(' ','')
         startX, startY = 0,0
         for c in s:
@@ -140,19 +157,19 @@ class ExpAPI(environment_handler3):
             if c in 'a!x.': 
                 startX += 1
 
-    # Set this experiment's possible starting states
-    def set_starting_states(self, state_template, debug=False):
+    # Set this experiment's possible starting states using complete template str
+    def _set_starting_states(self, state_template, debug=False):
         oind = state_template.index('o')
         if state_template.index('e') > oind: raise Exception()
         num_start_locs = state_template.count('a')
         num_goal_locs = state_template.count('!')
         if not state_template.find('*') > oind: raise Exception()
 
-        start_locs = list(self.find_all(state_template, 'a'))
-        goal_locs = list(self.find_all(state_template, '!'));
-        block_locs = list(self.find_all(state_template, 'x'));
+        start_locs = list(self._find_all(state_template, 'a'))
+        goal_locs = list(self._find_all(state_template, '!'));
+        block_locs = list(self._find_all(state_template, 'x'));
         if 'D' in state_template:
-            mobile_locs = list(self.find_all(state_template, '!'));
+            mobile_locs = list(self._find_all(state_template, '!'));
             self.valid_states = np.array( [AL, GL, AL|GL, IL, ML, ML|GL] ).T
         else:
             self.valid_states = np.array( [AL, GL, AL|GL, IL, ML] ).T
@@ -172,20 +189,34 @@ class ExpAPI(environment_handler3):
 
                 self.start_states.append( { 'flavor signal': flav_id, 'state': st, \
                         '_whichgoal':flav_id, '_startpos':start_box })
-        rnd_state = self.start_states[np.random.choice(range(24))]
+#        rnd_state = self.start_states[np.random.choice(range(24))]
+        rnd_state = np.random.choice(self.start_states)
         if debug: print_state(rnd_state, 'condensed')
 
-    def get_random_starting_state(self): 
-        st = self.start_states[np.random.choice(range(24))]
+    def _view_state_copy(self, st):
         sret = {}
         for key in ('_startpos','flavor signal','_whichgoal'):
             sret[key] = st[key]
         sret['state'] = np.copy(st['state'])
         return sret
 
-    def get_agent_loc(self,s):    return self._get_loc(s,targ='agent')
-    def get_goal_loc(self,s):     return self._get_loc(s,targ='goal')
-    def get_allo_loc(self,s):     return self._get_loc(s,targ='map') # center
+    def get_random_starting_state(self): 
+        ''' Public method: get a random state struct with fields: 'state', 
+        '_startpos', 'flavor signal', and '_whichgoal'. '''
+        #st = self.start_states[np.random.choice(range(24))]
+        return self._view_state_copy(np.random.choice(self.start_states))
+
+    def get_all_starting_states(self):
+        ''' Public method: get all state structs as a list; each struct has
+        fields: 'state', '_startpos', 'flavor signal', and '_whichgoal'. '''
+        return [self._view_state_copy(st) for st in self.start_states]
+
+    def get_agent_loc(self,state):    
+        '''Public method: query the location of the agent. (<0,0> is NW corner.)'''
+        return self._get_loc(state,targ='agent')
+
+#    def get_goal_loc(self,s):     return self._get_loc(s,targ='goal')
+#    def get_allo_loc(self,s):     return self._get_loc(s,targ='map') # center
     
     def _get_loc(self, state_matrix, targ):
         if targ=='agent': 
@@ -195,74 +226,69 @@ class ExpAPI(environment_handler3):
         if targ=='map':
             return multvec(self.gridsz, 2, '//') # center
 
-    def out_of_bounds(self, pos):
+    def _out_of_bounds(self, pos):
         return (pos[X] < 0 or pos[X] >= self.gridsz[X] or \
                 pos[Y] < 0 or pos[Y] >= self.gridsz[Y])
 
-    def is_valid_move(self, st, move): 
+    def _is_valid_move(self, st, move): 
         aloc = self.get_agent_loc(st)
         newaloc = addvec(aloc, move)
-        if self.out_of_bounds(newaloc): return False
+        if self._out_of_bounds(newaloc): return False
         if at(st, newaloc, immobileLayer): return False
         if at(st, newaloc, mobileLayer):
             st2 = np.copy(st)
             put(st2, newaloc, agentLayer, True)
             put(st2, aloc, agentLayer, False)
-            return self.is_valid_move(st2, move)
+            return self._is_valid_move(st2, move)
         return True
 
-    def move_ent_from_to(self, mat, loc, nextloc, lyr):
+    def _move_ent_from_to(self, mat, loc, nextloc, lyr):
         m2 = np.copy(mat)
         if not at(m2,loc,lyr): raise Exception()
         put(m2,loc,lyr, False)
         put(m2,nextloc,lyr, True)
         return m2
 
-    def adjust_blocks(self, mat, loc, dir_vec, debug=True):
+    def _adjust_blocks(self, mat, loc, dir_vec, debug=True):
         nloc = addvec(loc, dir_vec)
-        if self.out_of_bounds(nloc): return mat, False
+        if self._out_of_bounds(nloc): return mat, False
         arr = [what(mat, loc), what(mat, nloc)]
         ploc=nloc
         while True:
             nloc = addvec(ploc, dir_vec)
-            if self.out_of_bounds(nloc): return mat, False
+            if self._out_of_bounds(nloc): return mat, False
             if not arr[-1][mobileLayer]: return mat, not arr[-1][immobileLayer]
-            nmat = self.move_ent_from_to(mat, ploc, nloc, mobileLayer)
+            nmat = self._move_ent_from_to(mat, ploc, nloc, mobileLayer)
             if len(arr)>2: put(nmat, ploc, mobileLayer, True)
             arr.append(what(mat, nloc))
             ploc=nloc
             mat=nmat
         raise Exception()
 
-    def move_agent(self, state_mat, dir_vec):
-
-        print DIRVECS[dir_vec], self.is_valid_move(state_mat, dir_vec)
+    def _move_agent(self, state_mat, dir_vec):
+        #print DIRVECS[dir_vec], self._is_valid_move(state_mat, dir_vec)
         aloc = self.get_agent_loc(state_mat)
         newL = addvec(aloc, dir_vec)
         
-        state_mat2, success = self.adjust_blocks(state_mat, aloc, dir_vec)
+        state_mat2, success = self._adjust_blocks(state_mat, aloc, dir_vec)
+        state_mat2 = self._move_ent_from_to(state_mat2, aloc, newL, agentLayer)
 
-        state_mat2 = self.move_ent_from_to(state_mat2, aloc, newL, agentLayer)
-        '''
-        if st[newaloc[X],newaloc[Y],mobileLayer]: 
-            st2 = np.copy(st)
-            st2[newaloc[X],newaloc[Y],agentLayer]=1; 
-            st2[aloc[X], aloc[Y], agentLayer]=0;
-            return self.is_valid_move(st2, move)
-            '''
-
-        if self.is_valid_move(state_mat, dir_vec): return state_mat2
+        if self._is_valid_move(state_mat, dir_vec): return state_mat2
         return state_mat
 
     def new_statem(self, orig_state, action):
-        next_state = self.move_agent(orig_state, DVECS[action])
-                
-        return next_state
+        '''Public Method: error-proofed public method for making (S') from (S,A).'''
+        return self._move_agent(orig_state, DVECS[action])
+
+
+
+
 
 def _____dont_do_this__stub():
     for centr in ['egocentric', 'allocentric']:
-        ExpAPI('tse2007', centr).set_starting_states(TEMPLATE_TSE)
+        ExpAPI('tse2007', centr)._set_starting_states(TEMPLATE_TSE)
 
+# fun little test script:
 ex = ExpAPI('tse2007', 'egocentric')
 cur_state = ex.get_random_starting_state()['state']
 while True:
