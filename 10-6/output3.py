@@ -181,3 +181,7 @@ class MyEnv(gym.Env):
 my_env = MyEnv(ex)
 model.add(Dense(my_env.action_space.n, activation='linear'))
 print(model.summary())
+help(dqn.fit)
+24*-1
+24**-1
+help(dqn.fit)
