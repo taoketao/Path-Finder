@@ -394,8 +394,10 @@ class environment_handler3(object):
 
     ''' utilities '''
     def isGoalReached(self, State):
-        if State==None:
-            return False;
+        try:
+            if State==None:
+                return False;
+        except: pass
         return State.sparse and State.grid[0]==State.grid[1] \
                 or np.array_equal(State.grid[:,:,0], State.grid[:,:,1]) \
                 or np.array_equal(State.get_agent_loc(), State.get_goal_loc())

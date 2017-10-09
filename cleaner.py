@@ -23,6 +23,9 @@ DVECS = {MOVE_NORTH: (0,-1), MOVE_SOUTH: (0,1), MOVE_EAST: (1,0), \
         MOVE_WEST: (-1,0)}
 DIRVECS = {(0,-1):'N', (0,1):'S', (1,0):'E', (-1,0):'W'}
 OLAYERS = [agentLayer, goalLayer, immobileLayer, mobileLayer]
+
+INDICES_TO_CARDINAL_ACTIONS =\
+        { 0:MOVE_NORTH, 1:MOVE_SOUTH, 2:MOVE_EAST, 3:MOVE_WEST }
 # OLAYERS: ordered layers, where pos corresponds to value
 
 AL,GL,IL,ML = [0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]
@@ -56,6 +59,24 @@ TEMPLATE_TSE = ''' x x x x x x x x x x x  r
                    x x x x x x x x x x x  e
         o: D, *  
                    '''
+TEMPLATE_R_U_RU_orig = '''   x x x x x x x x x  r
+                        x x x x x x x x x  r
+                        x x x x x x x x x  r
+                        x x x . ! ! x x x  r
+                        x x x . a ! x x x  r
+                        x x x . . . x x x  r
+                        x x x x x x x x x  r
+                        x x x x x x x x x  r
+                        x x x x x x x x x  e
+                o: *    '''
+TEMPLATE_R_U_RU = '''   x x x x x  r
+                        x . ! ! x  r
+                        x . a ! x  r
+                        x . . . x  r
+                        x x x x x  e
+                o: *    '''
+
+
 
 '''   Printing legend for condensed mode:
     !  agent and goal       I  agent        -  immobile
@@ -83,24 +104,31 @@ def print_state(start_state, mode, print_or_ret='print'):
                 elif 0==np.sum(st[x,y,:]): S += str(' ')
                 else: 
                     S += str('#')
-                    print S
+                    print(S)
                     raise Exception("Error")
             S += str('\n')
     if not type(start_state)==np.ndarray:
-        S += str("Flavor signal: ", start_state['flavor signal'])
+        S += str("Flavor signal/goal id: ", start_state['flavor signal'])
 
-    if print_or_ret=='print': print S
+    if print_or_ret=='print': print(S)
     else: return S
 
 # General utilities:
 def map_nparr_to_tup(Iterable):
     return tuple([value.tolist()[0] for value in Iterable])
 
+#def addvec(Iterable, m, optn=None):
+#    try: 
+#        return tuple([i+m for i,m in zip(Iterable,m)])
+#    except:
+#        return tuple([i+m for i in Iterable])
 def addvec(Iterable, m, optn=None):
     try: 
-        return tuple([i+m for i,m in zip(Iterable,m)])
+        m[0]
     except:
-        return tuple([i+m for i in Iterable])
+        if m>80: m = DVECS[m]
+        else: m = DVECS[INDICES_TO_CARDINAL_ACTIONS[m]]
+    return tuple([i+m for i,m in zip(Iterable,m)])
 
 def multvec(Iterable, m, optn=None):
     if optn=='//':  return tuple([i//m for i in Iterable])
@@ -136,13 +164,16 @@ class ExpAPI(environment_handler3):
             rotational heading frames.
          - optional debug-mode boolean flag
         '''
-        environment_handler3.__init__(self, \
-                gridsize    = { 'tse2007': (11,11) }[experiment_name], \
+        environment_handler3.__init__(self, gridsize = \
+                { 'tse2007': (11,11), 'r-u-ru': (5,5) }[experiment_name], \
                 action_mode = centr )
+        self.centr = centr
         self.state_gen = state_generator(self.gridsz)
         self.start_states = []
-        self._set_starting_states(\
-                {'tse2007':TEMPLATE_TSE}[experiment_name], debug)
+        self._set_starting_states({\
+                   'tse2007':TEMPLATE_TSE, \
+                   'r-u-ru': TEMPLATE_R_U_RU, \
+                }[experiment_name], debug)
 
     def _find_all(self, a_str, char):
     # [internal] scan from a template string (eg, TEMPLATE_TSE)
@@ -172,6 +203,7 @@ class ExpAPI(environment_handler3):
             mobile_locs = list(self._find_all(state_template, '!'));
             self.valid_states = np.array( [AL, GL, AL|GL, IL, ML, ML|GL] ).T
         else:
+            mobile_locs = []
             self.valid_states = np.array( [AL, GL, AL|GL, IL, ML] ).T
 #        self.valid_states = np.append(self.valid_states, np.expand_dims(\
 #                np.array([0,0,0,0], dtype=bool)), axis=0)
@@ -179,6 +211,7 @@ class ExpAPI(environment_handler3):
         rx = [0,1,self.gridsz[X]-2, self.gridsz[X]-1]
         ry = [0,1,self.gridsz[Y]-2, self.gridsz[Y]-1]
 
+        ''' flavor == goal here. '''
         for start_box in start_locs:
             for flav_id, flavor_loc in enumerate(goal_locs):
                 st = np.zeros( (self.gridsz[X], self.gridsz[Y], NUM_LAYERS))
@@ -187,8 +220,9 @@ class ExpAPI(environment_handler3):
                 put_all(st, mobile_locs, mobileLayer, True)
                 put_all(st, block_locs,  immobileLayer, True)
 
-                self.start_states.append( { 'flavor signal': flav_id, 'state': st, \
-                        '_whichgoal':flav_id, '_startpos':start_box })
+                self.start_states.append( { 'flavor signal': flav_id, \
+                        'state': st, '_whichgoal':flav_id, \
+                        '_startpos':start_box, 'goal loc':flavor_loc })
 #        rnd_state = self.start_states[np.random.choice(range(24))]
         rnd_state = np.random.choice(self.start_states)
         if debug: print_state(rnd_state, 'condensed')
@@ -202,20 +236,24 @@ class ExpAPI(environment_handler3):
 
     def get_random_starting_state(self): 
         ''' Public method: get a random state struct with fields: 'state', 
-        '_startpos', 'flavor signal', and '_whichgoal'. '''
+        '_startpos', 'flavor signal', '_whichgoal', 'goal loc'. The three 
+        later fields are helper attributes for, say, curricula or presentation.   
+        '''
         #st = self.start_states[np.random.choice(range(24))]
         return self._view_state_copy(np.random.choice(self.start_states))
 
     def get_all_starting_states(self):
-        ''' Public method: get all state structs as a list; each struct has
-        fields: 'state', '_startpos', 'flavor signal', and '_whichgoal'. '''
+        ''' Public method: get a random state struct with fields: 'state', 
+        '_startpos', 'flavor signal', '_whichgoal', 'goal loc'. The three 
+        later fields are helper attributes for, say, curricula or presentation.   
+        '''
         return [self._view_state_copy(st) for st in self.start_states]
 
     def get_agent_loc(self,state):    
         '''Public method: query the location of the agent. (<0,0> is NW corner.)'''
         return self._get_loc(state,targ='agent')
 
-#    def get_goal_loc(self,s):     return self._get_loc(s,targ='goal')
+    def get_goal_loc(self,s):     return self._get_loc(s,targ='goal')
 #    def get_allo_loc(self,s):     return self._get_loc(s,targ='map') # center
     
     def _get_loc(self, state_matrix, targ):
@@ -245,6 +283,7 @@ class ExpAPI(environment_handler3):
     def _move_ent_from_to(self, mat, loc, nextloc, lyr):
         m2 = np.copy(mat)
         if not at(m2,loc,lyr): raise Exception()
+        #print ("Adjusting",lyr,loc,nextloc)
         put(m2,loc,lyr, False)
         put(m2,nextloc,lyr, True)
         return m2
@@ -256,6 +295,7 @@ class ExpAPI(environment_handler3):
         ploc=nloc
         while True:
             nloc = addvec(ploc, dir_vec)
+            #print('>>',dir_vec)
             if self._out_of_bounds(nloc): return mat, False
             if not arr[-1][mobileLayer]: return mat, not arr[-1][immobileLayer]
             nmat = self._move_ent_from_to(mat, ploc, nloc, mobileLayer)
@@ -265,21 +305,34 @@ class ExpAPI(environment_handler3):
             mat=nmat
         raise Exception()
 
-    def _move_agent(self, state_mat, dir_vec):
+    def _move_agent(self, state_mat, dir_vec, ret_valid_move):
         #print DIRVECS[dir_vec], self._is_valid_move(state_mat, dir_vec)
         aloc = self.get_agent_loc(state_mat)
         newL = addvec(aloc, dir_vec)
+        #print('>>',dir_vec)
         
         state_mat2, success = self._adjust_blocks(state_mat, aloc, dir_vec)
         state_mat2 = self._move_ent_from_to(state_mat2, aloc, newL, agentLayer)
+        if self.centr == 'egocentric':
+            shft, axis = { 0:(1,1), 1:(-1,1), 2:(-1,0), 3:(1,0) }[dir_vec]
+            state_mat2=np.roll(state_mat2, shift=shft, axis=axis)
+        elif not self.centr == 'allocentric': raise Exception(self.centr)
 
-        if self._is_valid_move(state_mat, dir_vec): return state_mat2
+        isValid = self._is_valid_move(state_mat, dir_vec)
+        if isValid: 
+            if ret_valid_move==True: return state_mat2, isValid
+            else: return state_mat2
+        if ret_valid_move==True: return state_mat, isValid
         return state_mat
 
-    def new_statem(self, orig_state, action):
-        '''Public Method: error-proofed public method for making (S') from (S,A).'''
-        return self._move_agent(orig_state, DVECS[action])
-
+    def new_statem(self, orig_state, action, valid_move_too=False):
+        '''Public Method: error-proofed public method for making (S') from (S,A)
+        NOT currently errorproofed against egocentrism!'''
+        #print('ACTION',action)
+        if action>=100:
+            return self._move_agent(orig_state, DVECS[action], valid_move_too)
+        else:
+            return self._move_agent(orig_state, action, valid_move_too)
 
 
 
@@ -291,11 +344,11 @@ def _____dont_do_this__stub():
 # fun little test script:
 ex = ExpAPI('tse2007', 'egocentric')
 cur_state = ex.get_random_starting_state()['state']
-while True:
-    print 'current state:' 
+while False:#True:
+    print('current state:') 
     print_state(cur_state, 'condensed')
-    print 'current location:', ex.get_agent_loc(cur_state)
-    inp = raw_input(' interface input >> ')
+    print('current location:', ex.get_agent_loc(cur_state))
+    inp = input(' interface input >> ')
     if not len(inp)==1: break
     try:
         inp_to_mov = {\
