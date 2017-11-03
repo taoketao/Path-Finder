@@ -35,5 +35,5 @@ class Experience:
 
     def dump(self): 
         return
-        print(print_state(self.state, 'condensed', 'ret string'),\
-                self.action, self.prediction, self.reward, self.done)
+#        print(print_state(self.state, 'condensed', 'ret string'),\
+#                self.action, self.prediction, self.reward, self.done)

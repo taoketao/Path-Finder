@@ -31,7 +31,6 @@ import tensorflow as tf
 
 from Config import Config
 
-
 class NetworkVP:
     def __init__(self, device, model_name, num_actions, \
                 training_step=None):
@@ -219,15 +218,15 @@ class NetworkVP:
 
         self.cost_all = self.cost_p + self.cost_v
 
-        self.opt = tf.train.RMSPropOptimizer(
-            learning_rate=self.var_learning_rate,
-            decay=Config.RMSPROP_DECAY,
-            momentum=Config.RMSPROP_MOMENTUM,
-            epsilon=Config.RMSPROP_EPSILON)
-
-#        self.opt = tf.train.AdamOptimizer(
+#        self.opt = tf.train.RMSPropOptimizer(
 #            learning_rate=self.var_learning_rate,
-#            epsilon=Config.ADAM_EPSILON)
+#            decay=Config.RMSPROP_DECAY,
+#            momentum=Config.RMSPROP_MOMENTUM,
+#            epsilon=Config.RMSPROP_EPSILON)
+
+        self.opt = tf.train.AdamOptimizer(
+            learning_rate=self.var_learning_rate,
+            epsilon=Config.ADAM_EPSILON)
 
         self.train_op = self.opt.minimize(self.cost_all, global_step=self.global_step)
 

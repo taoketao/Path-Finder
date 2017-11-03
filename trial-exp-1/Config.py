@@ -33,8 +33,9 @@ class Config:
 
     #ATARI_GAME = 'Pong-v0'
     #ATARI_GAME = 'tse2007'
-    ATARI_GAME = 'r-u-ru'
-    ATARI_GAME = 'r-u'
+    GAME_NAME = ATARI_GAME = 'r-u-ru'
+    GAME_NAME = ATARI_GAME = 'r-u'
+    CENTRISM = 'egocentric'
 
     # Enable to see the trained agent in action
     PLAY_MODE = False
@@ -50,11 +51,12 @@ class Config:
     
     # If the dynamic configuration is on, these are the initial values.
     # Number of Agents
+<<<<<<< HEAD
     AGENTS = 16
     # Number of Predictors
-    PREDICTORS = 4
+    PREDICTORS = 2
     # Number of Trainers
-    TRAINERS = 4
+    TRAINERS = 2
 
     # Device
     DEVICE = 'gpu:0'
@@ -74,7 +76,7 @@ class Config:
 
     # Discount factor
     DISCOUNT = 0.9 # MRB
-    EPSILON_EXPLORATION = 0.8 # MRb
+    EPSILON_EXPLORATION = 0.5 # MRb
     
     # Tmax
     TIME_MAX = 5
@@ -91,12 +93,13 @@ class Config:
     STACKED_FRAMES = 4
     IMAGE_WIDTH = 84
     IMAGE_HEIGHT = 84
-    if ATARI_GAME=='tse2007':
+    if GAME_NAME =='tse2007':
         IMAGE_WIDTH = 11
         IMAGE_HEIGHT = 11
-    if ATARI_GAME in ['r-u','r-u-ru']:
+    if GAME_NAME  in ['r-u','r-u-ru']:
         IMAGE_WIDTH = IMAGE_HEIGHT = 7
-    else: raise Exception("Game not recognized: ",ATARI_GAME)
+<<<<<<< HEAD
+    else: raise Exception("temp: ",GAME_NAME)
 
     # Total number of episodes and annealing frequency
     EPISODES = 50000
@@ -107,7 +110,7 @@ class Config:
     BETA_END = 0.01
 
     # Learning rate
-    LEARNING_RATE_START = 0.03
+    LEARNING_RATE_START = 0.003
     LEARNING_RATE_END = 0.003
 
     # RMSProp parameters

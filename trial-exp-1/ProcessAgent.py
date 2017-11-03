@@ -31,7 +31,8 @@ import numpy as np
 import time
 
 from Config import Config
-from Environment import Environment
+#from Environment import Environment
+from PathfinderEnv import PathEnvAuto
 from Experience import Experience
 
 
@@ -44,7 +45,7 @@ class ProcessAgent(Process):
         self.training_q = training_q
         self.episode_log_q = episode_log_q
 
-        self.env = Environment()
+        self.env = PathEnvAuto()
         self.num_actions = self.env.get_num_actions()
         self.actions = np.arange(self.num_actions)
 
@@ -102,12 +103,13 @@ class ProcessAgent(Process):
         while not done:
             # very first few frames
             if self.env.current_state is None:
-                self.env.step(0)  # 0 == NOOP
+                #self.env.step(0)  # 0 == NOOP     ??????
+                self.env.step(-1)
                 continue
 
             prediction, value = self.predict(self.env.current_state)
             action = self.select_action(prediction)
-            reward, done = self.env.step(action)
+            _state, reward, done, _data = self.env.step(action)
             reward_sum += reward
             exp = Experience(self.env.previous_state, action, \
                     prediction, reward, done)
