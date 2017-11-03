@@ -9,14 +9,16 @@ sys.path.insert(0, '/home/usrnet/Software/installers/gym/examples/agents')
 sys.path.insert(0, '/home/usrnet/Software/installers/gym')
 import imp
 import gym
+import numpy as np
 from gym import envs, spaces
 from gym.spaces import Discrete
 
-from random_agent import *
+#from random_agent import *
 from expenv import *
-from cem import *
+from environment import *
+#from cem import *
 
-def print_state(start_state, mode, print_or_ret='print'):
+def print_state(start_state, mode='condensed', print_or_ret='print'):
     S = ''
     if type(start_state)==np.ndarray:
         st = start_state
@@ -47,6 +49,8 @@ def print_state(start_state, mode, print_or_ret='print'):
     if print_or_ret=='print': print(S)
     else: return S
 
+def pr_st(st):
+    return print_state(st, 'condensed', '')
 
 
 
@@ -60,17 +64,27 @@ class PathEnv(gym.Env):
         Methods defined here: nothing of note. 
     '''
     def __init__(self, exp_env):
-        self.action_space = Discrete(4)
         sz = exp_env.getGridSize()
-        self.observation_space = spaces.Tuple((Discrete(sz[0]), \
-                                Discrete(sz[1]), Discrete(NUM_LAYERS)))
+#        self.observation_space = spaces.Tuple((Discrete(sz[0]), \
+#                                Discrete(sz[1]), Discrete(NUM_LAYERS)))
+#        self.observation_space.shape = tuple(sp.shape for sp in \
+#                                        self.observation_space.spaces)
+#        self.observation_space = spaces.Box(0,1, (Discrete(sz[0]), Discrete(sz[1]), Discrete(NUM_LAYERS)))
+        self.action_space = Discrete(4)
+        self.observation_space = spaces.Box(0,1, (sz[0], sz[1], NUM_LAYERS))
+                                       
+        # ^^ Because gym Tuples don't come with one....!?
+
         self.current_state = exp_env.get_random_starting_state()['state']
+        self.previous_state = self.current_state
+#        print ('>> current state:')
+#        print_state(self.current_state )
         self.exp_env = exp_env        
         self.metadata = {'render.modes':['human','ansi','PRINT','NOPRINT']}
         self.reward_range = (0,1)
         self.flag=True
 
-        if Config.ATARI_GAME=='r-u-ru':
+        if Config.GAME_NAME=='r-u-ru':
             if Config.CURRICULUM_NAME=='FLAT':
                 pass#self.level_1_task = 'r-u-ru'
             elif Config.CURRICULUM_NAME in ['LIN','STEP']:
@@ -78,6 +92,7 @@ class PathEnv(gym.Env):
 #                self.level_12_task = 'r-u-ru'
 #                self.level_2_task = 'ru'
                 self.levels = ['r-u', 'ru']
+        print("a pathfinder environment wrapper has been imported")
 
     def reset(self, epoch=-1): 
         if self.flag and not self.exp_env.experiment_name=='r-u-ru':
@@ -85,13 +100,14 @@ class PathEnv(gym.Env):
             self.flag=False;
             curriculum=None
         else:
-            curriculum=Config.CURRICULUM_NAME
+            curriculum=Config.CURRICULUM_NAME 
         return self._reset(curriculum, epoch) # ugh might be buggy watch out
 
     def _reset(self, curriculum=None, epoch=-1): 
         ''' Todo: augment so that it can take epoch args (which it 
             passes to the wrapped env for sampling. '''
-        self.current_state = self.exp_env.get_starting_state(curriculum, epoch)
+        self.previous_state = self.current_state = \
+                        self.exp_env.get_starting_state(curriculum, epoch)
         return self.current_state
 #        if curriculum==None:
 #            self.current_state = self.exp_env.get_random_starting_state()['state']
@@ -100,6 +116,7 @@ class PathEnv(gym.Env):
 #        return self.current_state 
     
     def _render(self, mode=None, close=None): 
+        #raise Exception("Debug. 442028 Mode: ", mode) This was inconclusive aaa deleted print several lines down.
         p= print_state(self.current_state, \
                            'condensed', 'string_ret')
         if mode in ['human','PRINT']: 
@@ -117,7 +134,17 @@ class PathEnv(gym.Env):
             self.current_state, actn, valid_move_too=True)
         goalReached = self.exp_env.get_agent_loc(new_st) == \
                       self.exp_env.get_goal_loc(new_st)
+        self.previous_state = self.current_state
         self.current_state = new_st
         return new_st, int(goalReached), (not succ) or goalReached, {}
+    
+    def get_num_actions(self): return len(DVECS) # untested
 
-print("pathfinder environment wrapper imported")
+
+class PathEnvAuto(PathEnv):
+    def __init__(self):
+        #super(PathEnv.__init__(self, exp_env(Config.GAME_NAME, Config.CENTRISM)))
+        try:
+            PathEnv.__init__(self, ExpAPI(Config.GAME_NAME, Config.CENTRISM))
+        except:
+            raise Exception()

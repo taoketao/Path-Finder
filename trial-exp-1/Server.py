@@ -29,7 +29,8 @@ from multiprocessing import Queue
 import time
 
 from Config import Config
-from Environment import Environment
+#from Environment import Environment 
+from PathfinderEnv import PathEnvAuto
 from NetworkVP import NetworkVP
 from ProcessAgent import ProcessAgent
 from ProcessStats import ProcessStats
@@ -45,8 +46,9 @@ class Server:
         self.training_q = Queue(maxsize=Config.MAX_QUEUE_SIZE)
         self.prediction_q = Queue(maxsize=Config.MAX_QUEUE_SIZE)
 
+        self._env = PathEnvAuto()
         self.model = NetworkVP(Config.DEVICE, Config.NETWORK_NAME,\
-                        Environment().get_num_actions())
+                        self._env.get_num_actions()) # Environment
         if Config.LOAD_CHECKPOINT:
             self.stats.episode_count.value = self.model.load()
 

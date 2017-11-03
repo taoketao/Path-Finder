@@ -179,7 +179,9 @@ class ExpAPI(environment_handler3):
                         '_startpos':start_box, 'goal loc':flavor_loc })
                 #        rnd_state = self.start_states[np.random.choice(range(24))]
         rnd_state = np.random.choice(self.start_states)
-        if debug: print_state(rnd_state, 'condensed')
+        if debug: 
+            print('flag 93747')
+            print_state(rnd_state, 'condensed')
 
     def _view_state_copy(self, st):
         sret = {}
@@ -318,6 +320,7 @@ if __name__=='__main__':
     cur_state = ex.get_random_starting_state()['state']
     while False:#True:
         print('current state:') 
+        print('flag 36351')
         print_state(cur_state, 'condensed')
         print('current location:', ex.get_agent_loc(cur_state))
         inp = input(' interface input >> ')
