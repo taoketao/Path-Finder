@@ -50,17 +50,17 @@ class Config:
     
     # If the dynamic configuration is on, these are the initial values.
     # Number of Agents
-    AGENTS = 4 
+    AGENTS = 16
     # Number of Predictors
-    PREDICTORS = 1
+    PREDICTORS = 4
     # Number of Trainers
-    TRAINERS = 1
+    TRAINERS = 4
 
     # Device
     DEVICE = 'gpu:0'
 
     # Enable the dynamic adjustment (+ waiting time to start it)
-    DYNAMIC_SETTINGS = True
+    DYNAMIC_SETTINGS = False
     DYNAMIC_SETTINGS_STEP_WAIT = 20
     DYNAMIC_SETTINGS_INITIAL_WAIT = 10
 
@@ -96,10 +96,10 @@ class Config:
         IMAGE_HEIGHT = 11
     if ATARI_GAME in ['r-u','r-u-ru']:
         IMAGE_WIDTH = IMAGE_HEIGHT = 7
-    else: raise Exception("temp: ",ATARI_GAME)
+    else: raise Exception("Game not recognized: ",ATARI_GAME)
 
     # Total number of episodes and annealing frequency
-    EPISODES = 300000
+    EPISODES = 50000
     ANNEALING_EPISODE_COUNT = 1
 
     # Entropy regualrization hyper-parameter
@@ -143,9 +143,9 @@ class Config:
     SAVE_FREQUENCY = 10000
     
     # Print stats every PRINT_STATS_FREQUENCY episodes
-    PRINT_STATS_FREQUENCY = 3000
+    PRINT_STATS_FREQUENCY = 100
     # The window to average stats
-    STAT_ROLLING_MEAN_WINDOW = 1000
+    STAT_ROLLING_MEAN_WINDOW = 200
 
     # Results filename
     RESULTS_FILENAME = 'results.txt'

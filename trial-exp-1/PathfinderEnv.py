@@ -118,6 +118,12 @@ class PathEnv(gym.Env):
         goalReached = self.exp_env.get_agent_loc(new_st) == \
                       self.exp_env.get_goal_loc(new_st)
         self.current_state = new_st
+        if Config.PLAY_MODE:
+            if goalReached: s=' reward: 1'
+            elif not succ: s=' reward: 0'
+            else: s=''
+            print ('action:',actn,'  goalReached:',goalReached,'  acceptable '+\
+                    'move:',succ,s,'\n')
         return new_st, int(goalReached), (not succ) or goalReached, {}
 
 print("pathfinder environment wrapper imported")
